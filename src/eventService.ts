@@ -63,8 +63,17 @@ function buildLocationValue(location: string, venueUrl: string | null): string {
   return `${location}\n${venueUrl}`;
 }
 
-function addLightSpacing(value: string): string {
-  return `${value}\n\u200B`;
+function buildEventInfoDescription(
+  state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
+  candidate: EventCandidate,
+  venueUrl: string | null
+): string {
+  return [
+    `**🗓️ 開催日時**\n${candidate.label}`,
+    `**💰 今回の参加費**\n${formatYen(state.fee)}円`,
+    `**🧾 利用総額 / 現地参加**\n${formatYen(state.price)}円 / ${state.attendees}人`,
+    `**📍 開催場所**\n${buildLocationValue(state.location, venueUrl)}`
+  ].join("\n\n");
 }
 
 function buildGoogleMapsSearchUrl(location: string): string | null {
@@ -242,14 +251,8 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
   const embed = new EmbedBuilder()
     .setColor(0xe33555)
     .setTitle(state.title)
-    .setDescription("\u200B")
+    .setDescription(buildEventInfoDescription(state, candidate, venueUrl))
     .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
-    .addFields(
-      { name: "🗓️ 開催日時", value: addLightSpacing(candidate.label) },
-      { name: "💰 今回の参加費", value: addLightSpacing(`${formatYen(state.fee)}円`), inline: true },
-      { name: "🧾 利用総額 / 現地参加", value: addLightSpacing(`${formatYen(state.price)}円 / ${state.attendees}人`), inline: true },
-      { name: "📍 開催場所", value: buildLocationValue(state.location, venueUrl) }
-    )
     .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
 
   if (staticMapUrl) {
