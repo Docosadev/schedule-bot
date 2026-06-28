@@ -56,6 +56,7 @@ WEB_BASE_URL=http://localhost:3000
 `WEB_BASE_URL` は `/schedule` で返す作成画面URLです。
 ローカル検証では `http://localhost:3000` で動きます。
 他の端末や外部メンバーにも使わせる場合は、トンネルやデプロイ先のURLに変更してください。
+Renderにデプロイする場合は、未設定ならRenderの自動環境変数 `RENDER_EXTERNAL_URL` を使います。
 
 `WEB_HOST=0.0.0.0` にすると、同じLAN内の別デバイスからもWeb作成画面へアクセスできます。
 
@@ -151,6 +152,67 @@ WEB_BASE_URL=http://100.64.1.25:3000
 - `npm run dev` または `npm start` が起動したままになっている
 - Windows Defender ファイアウォールが Node.js の通信をブロックしていない
 - URLのIPアドレスが現在のPCのIPアドレスと一致している
+
+## Renderで無料枠デプロイを試す
+
+Renderにデプロイする場合は、GitHubリポジトリからWeb Serviceとして起動します。
+このBOTは1つのNode.jsプロセスでDiscord BOTとWebUIの両方を動かします。
+
+### Renderの設定
+
+Renderで新しいWeb Serviceを作成し、GitHubリポジトリを選択します。
+
+推奨設定:
+
+```text
+Runtime: Node
+Build Command: npm install && npm run build
+Start Command: npm start
+Instance Type: Free
+```
+
+環境変数:
+
+```env
+DISCORD_TOKEN=your_bot_token
+DISCORD_CLIENT_ID=your_application_client_id
+DISCORD_GUILD_ID=your_server_id
+DATABASE_PATH=./data/schedule-bot.sqlite
+BOT_TIMEZONE=Asia/Tokyo
+REMINDER_HOURS_BEFORE=24,3
+DOCOSA_MENTION=
+WEB_HOST=0.0.0.0
+WEB_PORT=3000
+```
+
+Renderでは `WEB_BASE_URL` は初回から省略できます。
+省略した場合、Renderが自動で用意する `RENDER_EXTERNAL_URL` を使って `/schedule` の作成画面URLを生成します。
+独自ドメインなどに変えたい場合だけ、`WEB_BASE_URL=https://your-domain.example` を追加してください。
+
+### UptimeRobotでスリープ対策
+
+Renderの無料Web Serviceは無通信が続くとスリープするため、UptimeRobotなどでヘルスチェックURLを定期的に叩きます。
+
+監視URL:
+
+```text
+https://your-render-service.onrender.com/healthz
+```
+
+推奨:
+
+```text
+Monitor Type: HTTP(s)
+Interval: 5 minutes
+```
+
+### Render無料枠での注意点
+
+- 無料Web Serviceはスリープするため、起動直後の反応が遅くなることがある
+- 無料枠ではローカルSQLiteの永続性に不安がある
+- 再デプロイや再起動で `./data/schedule-bot.sqlite` が失われる可能性がある
+- 長期運用でデータを確実に残すなら外部DB化を検討する
+- BOTトークンや `.env` はGitHubにpushしない
 
 ## Koyebで無料枠デプロイを試す
 

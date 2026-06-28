@@ -43,5 +43,8 @@ export const config: Config = {
   docosaMention: process.env.DOCOSA_MENTION,
   webPort: Number(process.env.WEB_PORT ?? process.env.PORT ?? "3000"),
   webHost: process.env.WEB_HOST ?? "0.0.0.0",
-  webBaseUrl: process.env.WEB_BASE_URL ?? `http://localhost:${process.env.WEB_PORT ?? process.env.PORT ?? "3000"}`
+  webBaseUrl:
+    process.env.WEB_BASE_URL ??
+    process.env.RENDER_EXTERNAL_URL ??
+    `http://localhost:${process.env.WEB_PORT ?? process.env.PORT ?? "3000"}`
 };
