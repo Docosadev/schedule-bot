@@ -461,7 +461,12 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   await closePoll(syncedPoll.id, "closed");
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(interaction.guild);
-  await interaction.followUp({
+  if (!isGuildTextChannel(interaction.channel)) {
+    await interaction.editReply("アンケートを締め切りましたが、結果を投稿できるチャンネルを確認できませんでした。");
+    return;
+  }
+
+  await interaction.channel.send({
     content: await buildResultMessage(closedPoll, docosaMention),
     allowedMentions: { parse: ["users", "roles"] }
   });
