@@ -1,4 +1,5 @@
 import {
+  AttachmentBuilder,
   ChatInputCommandInteraction,
   Guild,
   GuildTextBasedChannel,
@@ -34,6 +35,7 @@ import {
 import { formatDeadline, formatOptionLabel, parseDateList, parseLocalDateTime } from "./dateUtils.js";
 import { formatRemainingTime, normalizeReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import { buildOptionMessage, buildPollHeaderMessage, buildResultMessage, buildVotedMembersMessage } from "./render.js";
+import { buildResultMatrixImage, type MatrixParticipant } from "./resultImage.js";
 import type { Poll, PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { statusFromEmoji, VOTE_EMOJIS } from "./voteEmojis.js";
 
@@ -408,12 +410,42 @@ async function syncVotesFromDiscord(channel: GuildTextBasedChannel, poll: PollWi
   return (await getPoll(poll.id)) ?? poll;
 }
 
+async function buildResultMatrixAttachment(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<AttachmentBuilder | null> {
+  try {
+    const votes = await getVotesForPoll(poll.id);
+    const userIds = [...new Set(votes.map((vote) => vote.userId))];
+    const participants = await Promise.all(
+      userIds.map(async (userId): Promise<MatrixParticipant> => {
+        const member = await channel.guild.members.fetch(userId).catch(() => null);
+        if (member) {
+          return { userId, displayName: member.displayName };
+        }
+
+        const user = await channel.client.users.fetch(userId).catch(() => null);
+        return { userId, displayName: user?.displayName ?? user?.username ?? userId };
+      })
+    );
+    participants.sort((a, b) => a.displayName.localeCompare(b.displayName, "ja"));
+
+    const image = await buildResultMatrixImage(poll, participants, votes);
+    return new AttachmentBuilder(image, { name: `${poll.id}-matrix.png` });
+  } catch (error) {
+    console.warn("failed to build result matrix image", { pollId: poll.id }, error);
+    return null;
+  }
+}
+
 export async function closeAndReportPoll(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<void> {
   const syncedPoll = await syncVotesFromDiscord(channel, poll);
   await closePoll(syncedPoll.id, "closed");
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(channel.guild);
-  await channel.send({ content: await buildResultMessage(closedPoll, docosaMention), allowedMentions: { parse: ["users", "roles"] } });
+  const matrixAttachment = await buildResultMatrixAttachment(channel, closedPoll);
+  await channel.send({
+    content: await buildResultMessage(closedPoll, docosaMention),
+    files: matrixAttachment ? [matrixAttachment] : [],
+    allowedMentions: { parse: ["users", "roles"] }
+  });
 }
 
 async function deletePollMessages(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<number> {
@@ -512,8 +544,10 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
     return;
   }
 
+  const matrixAttachment = await buildResultMatrixAttachment(interaction.channel, closedPoll);
   await interaction.channel.send({
     content: await buildResultMessage(closedPoll, docosaMention),
+    files: matrixAttachment ? [matrixAttachment] : [],
     allowedMentions: { parse: ["users", "roles"] }
   });
   await interaction.editReply("アンケートを締め切り、結果を投稿しました。");

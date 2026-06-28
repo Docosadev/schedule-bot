@@ -22,7 +22,8 @@
     "discord-api-types": "^0.37.115",
     "discord.js": "^14.17.3",
     "dotenv": "^16.4.7",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "sharp": "^0.35.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
