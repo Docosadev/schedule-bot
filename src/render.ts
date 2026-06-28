@@ -5,8 +5,8 @@ import { formatReminderMinutes, parseReminderMinutesJson } from "./reminders.js"
 import type { PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { VOTE_EMOJIS, VOTE_LABELS } from "./voteEmojis.js";
 
-export function buildPollEmbed(poll: PollWithOptions): EmbedBuilder {
-  const breakdown = getVoteBreakdown(poll.id);
+export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilder> {
+  const breakdown = await getVoteBreakdown(poll.id);
 
   const statusLabel = poll.status === "open" ? "受付中" : poll.status === "closed" ? "締切済み" : "キャンセル済み";
   const visibilityLabel = poll.anonymous ? "匿名表示" : "投票者確認可";
@@ -51,8 +51,8 @@ export function buildVotedMembersMessage(names: string[]): string {
   return `投票済み：${names.length ? names.join(", ") : "まだ誰も投票していません。"}`;
 }
 
-export function buildResultMessage(poll: PollWithOptions, leadingMention?: string): string {
-  const counts = getVoteCounts(poll.id);
+export async function buildResultMessage(poll: PollWithOptions, leadingMention?: string): Promise<string> {
+  const counts = await getVoteCounts(poll.id);
   const ranked = [...poll.options]
     .map((option) => ({ option, count: counts.get(option.id) ?? 0 }))
     .sort((a, b) => b.count - a.count || a.option.position - b.option.position);
@@ -80,12 +80,12 @@ export function buildResultMessage(poll: PollWithOptions, leadingMention?: strin
   ].filter((line, index) => index !== 0 || line.length > 0).join("\n");
 }
 
-export function buildVoterList(poll: PollWithOptions): string {
+export async function buildVoterList(poll: PollWithOptions): Promise<string> {
   if (poll.anonymous) {
     return "このアンケートは匿名表示モードのため、投票者一覧は表示できません。";
   }
 
-  const votes = getVotesForPoll(poll.id);
+  const votes = await getVotesForPoll(poll.id);
   const byOption = new Map<string, string[]>();
   for (const vote of votes) {
     const users = byOption.get(vote.optionId) ?? [];
@@ -111,8 +111,8 @@ export function buildVoterList(poll: PollWithOptions): string {
   return [`投票者一覧: ${poll.title}`, "", ...lines].join("\n\n");
 }
 
-export function buildPollSummary(poll: PollWithOptions): string {
-  const breakdown = getVoteBreakdown(poll.id);
+export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
+  const breakdown = await getVoteBreakdown(poll.id);
   const reminders = parseReminderMinutesJson(poll.reminderMinutes)
     .map(formatReminderMinutes)
     .join(", ");

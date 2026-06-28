@@ -12,6 +12,7 @@ Discord 用の日程調整 BOT です。
 - 投票数はDiscordのリアクション数で確認
 - 末尾に投票済みメンバー一覧をリアルタイム表示
 - 締切後に自動集計して通知
+- 締切時にDiscordリアクションを再取得して投票結果を補正
 - 締切後に追加されたリアクションは自動で取り消し
 - アンケートごとの締切前リマインド
 - 投票者一覧
@@ -19,6 +20,7 @@ Discord 用の日程調整 BOT です。
 - 手動締切、締切延長、キャンセル、削除
 - 削除時は関連するDiscordメッセージも削除
 - 候補日ごとの個別メッセージは通知を抑制
+- SQLiteまたはPostgres/Neonにアンケート情報を保存
 
 ## セットアップ
 
@@ -36,6 +38,7 @@ npm install
 DISCORD_TOKEN=your_bot_token
 DISCORD_CLIENT_ID=your_application_client_id
 DISCORD_GUILD_ID=your_test_guild_id
+DATABASE_URL=
 DATABASE_PATH=./data/schedule-bot.sqlite
 BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
@@ -52,6 +55,10 @@ WEB_BASE_URL=http://localhost:3000
 `DOCOSA_MENTION` は任意です。
 未設定の場合はサーバー内の `Docosa` ロールを探してメンションします。
 ユーザーや別ロールを確実にメンションしたい場合は、`<@ユーザーID>` または `<@&ロールID>` を設定してください。
+
+`DATABASE_URL` は任意です。
+NeonなどのPostgresを使う場合は接続文字列を設定してください。
+未設定の場合は `DATABASE_PATH` のSQLiteファイルを使います。
 
 `WEB_BASE_URL` は `/schedule` で返す作成画面URLです。
 ローカル検証では `http://localhost:3000` で動きます。
@@ -177,12 +184,15 @@ Instance Type: Free
 DISCORD_TOKEN=your_bot_token
 DISCORD_CLIENT_ID=your_application_client_id
 DISCORD_GUILD_ID=your_server_id
-DATABASE_PATH=./data/schedule-bot.sqlite
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
 DOCOSA_MENTION=
 WEB_HOST=0.0.0.0
 ```
+
+`DATABASE_URL` にはNeonの接続文字列を設定します。
+`DATABASE_URL` を設定した場合、`DATABASE_PATH` は不要です。
 
 Renderでは `WEB_BASE_URL` は初回から省略できます。
 省略した場合、Renderが自動で用意する `RENDER_EXTERNAL_URL` を使って `/schedule` の作成画面URLを生成します。
@@ -213,9 +223,9 @@ Discord接続完了まで含めて確認したい場合は `/readyz` を使え�
 ### Render無料枠での注意点
 
 - 無料Web Serviceはスリープするため、起動直後の反応が遅くなることがある
-- 無料枠ではローカルSQLiteの永続性に不安がある
-- 再デプロイや再起動で `./data/schedule-bot.sqlite` が失われる可能性がある
-- 長期運用でデータを確実に残すなら外部DB化を検討する
+- `DATABASE_URL` を設定しない場合、ローカルSQLiteの永続性に不安がある
+- `DATABASE_URL` を設定しない場合、再デプロイや再起動で `./data/schedule-bot.sqlite` が失われる可能性がある
+- 長期運用でデータを確実に残すならNeonなどの外部Postgresを使う
 - BOTトークンや `.env` はGitHubにpushしない
 
 ## Koyebで無料枠デプロイを試す

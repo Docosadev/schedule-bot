@@ -10,7 +10,7 @@ import { migrate } from "./db.js";
 import { checkDuePolls, checkReminders, handleReactionAdd, handleReactionRemove } from "./pollService.js";
 import { startWebServer } from "./webServer.js";
 
-migrate();
+await migrate();
 
 const client = new Client({
   intents: [

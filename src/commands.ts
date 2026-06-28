@@ -87,7 +87,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
   const subcommand = interaction.options.getSubcommand();
 
   if (subcommand === "list") {
-    const polls = getOpenPolls().filter((poll) => poll.guildId === interaction.guildId);
+    const polls = (await getOpenPolls()).filter((poll) => poll.guildId === interaction.guildId);
     if (polls.length === 0) {
       await interaction.reply({ content: "受付中のアンケートはありません。", ephemeral: true });
       return;
@@ -101,23 +101,23 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
 
   if (subcommand === "show") {
     const pollId = interaction.options.getString("poll_id", true);
-    const poll = getPoll(pollId);
+    const poll = await getPoll(pollId);
     if (!poll) {
       await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
       return;
     }
-    await interaction.reply({ content: buildPollSummary(poll), embeds: [buildPollEmbed(poll)], ephemeral: true });
+    await interaction.reply({ content: await buildPollSummary(poll), embeds: [await buildPollEmbed(poll)], ephemeral: true });
     return;
   }
 
   if (subcommand === "voters") {
     const pollId = interaction.options.getString("poll_id", true);
-    const poll = getPoll(pollId);
+    const poll = await getPoll(pollId);
     if (!poll) {
       await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
       return;
     }
-    await interaction.reply({ content: buildVoterList(poll), ephemeral: true });
+    await interaction.reply({ content: await buildVoterList(poll), ephemeral: true });
     return;
   }
 

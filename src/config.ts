@@ -4,6 +4,7 @@ export type Config = {
   token: string;
   clientId: string;
   guildId?: string;
+  databaseUrl?: string;
   databasePath: string;
   timezone: string;
   reminderHoursBefore: number[];
@@ -37,6 +38,7 @@ export const config: Config = {
   token: requireEnv("DISCORD_TOKEN"),
   clientId: requireEnv("DISCORD_CLIENT_ID"),
   guildId: process.env.DISCORD_GUILD_ID,
+  databaseUrl: process.env.DATABASE_URL,
   databasePath: process.env.DATABASE_PATH ?? "./data/schedule-bot.sqlite",
   timezone: process.env.BOT_TIMEZONE ?? "Asia/Tokyo",
   reminderHoursBefore: parseReminderHours(process.env.REMINDER_HOURS_BEFORE),

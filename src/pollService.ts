@@ -22,8 +22,10 @@ import {
   getPollByMessage,
   getVotedUserIds,
   getVoteCounts,
+  replaceVotesForPoll,
   removeVoteForStatus,
   setRemindedMinutes,
+  type VoteSnapshot,
   updateOptionMessageId,
   updatePollMessageId,
   updateVoterMessageId
@@ -129,8 +131,8 @@ export async function publishSchedulePoll(
   const { poll, options } = buildPollFromInput(input);
   const sentMessages: Message[] = [];
 
-  createPoll(poll, options);
-  const savedPoll = getPoll(poll.id);
+  await createPoll(poll, options);
+  const savedPoll = await getPoll(poll.id);
   if (!savedPoll) {
     throw new Error("アンケートの保存に失敗しました。");
   }
@@ -141,7 +143,7 @@ export async function publishSchedulePoll(
       allowedMentions: { parse: ["everyone"] }
     });
     sentMessages.push(headerMessage);
-    updatePollMessageId(poll.id, headerMessage.id);
+    await updatePollMessageId(poll.id, headerMessage.id);
 
     for (const option of savedPoll.options) {
       const optionMessage = await channel.send({
@@ -149,7 +151,7 @@ export async function publishSchedulePoll(
         flags: MessageFlags.SuppressNotifications
       });
       sentMessages.push(optionMessage);
-      updateOptionMessageId(option.id, optionMessage.id);
+      await updateOptionMessageId(option.id, optionMessage.id);
       await optionMessage.react(VOTE_EMOJIS.yes);
       await optionMessage.react(VOTE_EMOJIS.no);
       await optionMessage.react(VOTE_EMOJIS.maybe);
@@ -160,11 +162,11 @@ export async function publishSchedulePoll(
       flags: MessageFlags.SuppressNotifications
     });
     sentMessages.push(voterMessage);
-    updateVoterMessageId(poll.id, voterMessage.id);
+    await updateVoterMessageId(poll.id, voterMessage.id);
 
     return { pollId: poll.id, messageUrl: headerMessage.url };
   } catch (error) {
-    deletePoll(poll.id);
+    await deletePoll(poll.id);
     await Promise.allSettled(sentMessages.map((message) => message.delete()));
     throw error;
   }
@@ -207,7 +209,7 @@ export async function createSchedulePoll(interaction: ChatInputCommandInteractio
 }
 
 async function refreshVotedMembersMessage(channel: GuildTextBasedChannel, pollId: string): Promise<void> {
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll?.voterMessageId) {
     return;
   }
@@ -218,7 +220,7 @@ async function refreshVotedMembersMessage(channel: GuildTextBasedChannel, pollId
 }
 
 async function resolveVotedMemberNames(channel: GuildTextBasedChannel, pollId: string): Promise<string[]> {
-  const userIds = getVotedUserIds(pollId);
+  const userIds = await getVotedUserIds(pollId);
   const names: string[] = [];
   for (const userId of userIds) {
     const member = await channel.guild.members.fetch(userId).catch(() => null);
@@ -243,7 +245,7 @@ export async function handleReactionAdd(reaction: MessageReaction | PartialMessa
     return;
   }
 
-  const found = getPollByMessage(reaction.message.id, emoji);
+  const found = await getPollByMessage(reaction.message.id);
   if (!found) {
     return;
   }
@@ -252,7 +254,7 @@ export async function handleReactionAdd(reaction: MessageReaction | PartialMessa
     return;
   }
 
-  addVote(found.poll, found.option, user.id, status);
+  await addVote(found.poll, found.option, user.id, status);
   await removeOtherStatusReactions(reaction.message as Message, status, user.id);
   if (isGuildTextChannel(reaction.message.channel)) {
     await refreshVotedMembersMessage(reaction.message.channel, found.poll.id);
@@ -275,12 +277,12 @@ export async function handleReactionRemove(reaction: MessageReaction | PartialMe
     return;
   }
 
-  const found = getPollByMessage(reaction.message.id, emoji);
+  const found = await getPollByMessage(reaction.message.id);
   if (!found || found.poll.status !== "open") {
     return;
   }
 
-  removeVoteForStatus(found.poll.id, found.option.id, user.id, status);
+  await removeVoteForStatus(found.poll.id, found.option.id, user.id, status);
   if (isGuildTextChannel(reaction.message.channel)) {
     await refreshVotedMembersMessage(reaction.message.channel, found.poll.id);
   }
@@ -296,11 +298,76 @@ async function removeOtherStatusReactions(message: Message, selected: VoteStatus
   }
 }
 
+const REACTION_SYNC_ORDER: [VoteStatus, string][] = [
+  ["yes", VOTE_EMOJIS.yes],
+  ["maybe", VOTE_EMOJIS.maybe],
+  ["no", VOTE_EMOJIS.no]
+];
+
+async function fetchReactionUserIds(reaction: MessageReaction): Promise<string[]> {
+  const userIds: string[] = [];
+  let after: string | undefined;
+
+  while (true) {
+    const users = await reaction.users.fetch({ limit: 100, after }).catch(() => null);
+    if (!users || users.size === 0) {
+      break;
+    }
+
+    for (const user of users.values()) {
+      if (!user.bot) {
+        userIds.push(user.id);
+      }
+    }
+
+    after = users.last()?.id;
+    if (users.size < 100 || !after) {
+      break;
+    }
+  }
+
+  return userIds;
+}
+
+async function syncVotesFromDiscord(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<PollWithOptions> {
+  const votesByUserAndOption = new Map<string, VoteSnapshot>();
+
+  for (const option of poll.options) {
+    if (!option.messageId) {
+      continue;
+    }
+
+    const message = await channel.messages.fetch(option.messageId).catch(() => null);
+    if (!message) {
+      continue;
+    }
+
+    for (const [status, emoji] of REACTION_SYNC_ORDER) {
+      const reaction = message.reactions.cache.find((item) => item.emoji.name === emoji);
+      if (!reaction) {
+        continue;
+      }
+
+      const userIds = await fetchReactionUserIds(reaction);
+      for (const userId of userIds) {
+        const key = `${option.id}:${userId}`;
+        if (!votesByUserAndOption.has(key)) {
+          votesByUserAndOption.set(key, { optionId: option.id, userId, status });
+        }
+      }
+    }
+  }
+
+  await replaceVotesForPoll(poll.id, [...votesByUserAndOption.values()]);
+  return (await getPoll(poll.id)) ?? poll;
+}
+
 export async function closeAndReportPoll(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<void> {
-  closePoll(poll.id, "closed");
-  const closedPoll = getPoll(poll.id) ?? poll;
+  const syncedPoll = await syncVotesFromDiscord(channel, poll);
+  await closePoll(syncedPoll.id, "closed");
+  const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(channel.guild);
-  await channel.send({ content: buildResultMessage(closedPoll, docosaMention), allowedMentions: { parse: ["users", "roles"] } });
+  await channel.send({ content: await buildResultMessage(closedPoll, docosaMention), allowedMentions: { parse: ["users", "roles"] } });
 }
 
 async function deletePollMessages(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<number> {
@@ -327,20 +394,20 @@ async function deletePollMessages(channel: GuildTextBasedChannel, poll: PollWith
 }
 
 export async function checkDuePolls(clientChannelsFetch: (channelId: string) => Promise<unknown>): Promise<void> {
-  const duePolls = getOpenPollsDue(new Date().toISOString());
+  const duePolls = await getOpenPollsDue(new Date().toISOString());
   for (const poll of duePolls) {
     const channel = await clientChannelsFetch(poll.channelId).catch(() => null);
     if (isGuildTextChannel(channel)) {
       await closeAndReportPoll(channel, poll);
     } else {
-      closePoll(poll.id, "closed");
+      await closePoll(poll.id, "closed");
     }
   }
 }
 
 export async function checkReminders(clientChannelsFetch: (channelId: string) => Promise<unknown>): Promise<void> {
   const now = Date.now();
-  for (const poll of getOpenPolls()) {
+  for (const poll of await getOpenPolls()) {
     const deadline = new Date(poll.deadline).getTime();
     const createdAt = new Date(poll.createdAt).getTime();
     const remainingMs = deadline - now;
@@ -366,13 +433,13 @@ export async function checkReminders(clientChannelsFetch: (channelId: string) =>
         `日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}です。\n締切: ${formatDeadline(poll.deadline)}`
       );
     }
-    setRemindedMinutes(poll.id, newlyRemindedMinutes);
+    await setRemindedMinutes(poll.id, newlyRemindedMinutes);
   }
 }
 
 export async function closePollByCommand(interaction: ChatInputCommandInteraction, cancelled = false): Promise<void> {
   const pollId = interaction.options.getString("poll_id", true);
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll) {
     await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
     return;
@@ -383,16 +450,17 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   }
 
   if (cancelled) {
-    closePoll(poll.id, "cancelled");
+    await closePoll(poll.id, "cancelled");
     await interaction.reply("アンケートをキャンセルしました。");
     return;
   }
 
-  closePoll(poll.id, "closed");
-  const closedPoll = getPoll(poll.id) ?? poll;
+  const syncedPoll = isGuildTextChannel(interaction.channel) ? await syncVotesFromDiscord(interaction.channel, poll) : poll;
+  await closePoll(syncedPoll.id, "closed");
+  const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(interaction.guild);
   await interaction.reply({
-    content: buildResultMessage(closedPoll, docosaMention),
+    content: await buildResultMessage(closedPoll, docosaMention),
     allowedMentions: { parse: ["users", "roles"] }
   });
 }
@@ -400,7 +468,7 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
 export async function extendPollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const pollId = interaction.options.getString("poll_id", true);
   const deadlineInput = interaction.options.getString("deadline", true);
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   const deadline = parseLocalDateTime(deadlineInput);
 
   if (!poll || !deadline) {
@@ -412,13 +480,13 @@ export async function extendPollByCommand(interaction: ChatInputCommandInteracti
     return;
   }
 
-  extendPoll(pollId, deadline.toISOString());
+  await extendPoll(pollId, deadline.toISOString());
   await interaction.reply(`締切を延長しました: ${formatDeadline(deadline.toISOString())}`);
 }
 
 export async function deletePollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const pollId = interaction.options.getString("poll_id", true);
-  const poll = getPoll(pollId);
+  const poll = await getPoll(pollId);
   if (!poll) {
     await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
     return;
@@ -435,7 +503,7 @@ export async function deletePollByCommand(interaction: ChatInputCommandInteracti
     deletedMessages = await deletePollMessages(interaction.channel, poll);
   }
 
-  deletePoll(pollId);
+  await deletePoll(pollId);
   await interaction.editReply(`アンケートを削除しました。関連メッセージ ${deletedMessages} 件を削除しました。`);
 }
 
@@ -447,7 +515,7 @@ export function canManagePoll(interaction: ChatInputCommandInteraction, poll: Po
   return Boolean(permissions?.has("ManageGuild") || permissions?.has("Administrator"));
 }
 
-export function summarizeCounts(poll: PollWithOptions): string {
-  const counts = getVoteCounts(poll.id);
+export async function summarizeCounts(poll: PollWithOptions): Promise<string> {
+  const counts = await getVoteCounts(poll.id);
   return poll.options.map((option) => `${option.emoji} ${option.label}: ${counts.get(option.id) ?? 0}票`).join("\n");
 }
