@@ -1,5 +1,6 @@
 import {
   ActionRowBuilder,
+  AttachmentBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildTextBasedChannel,
@@ -10,6 +11,7 @@ import {
   StringSelectMenuInteraction
 } from "discord.js";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { config } from "./config.js";
 import { parseLocalDateTime } from "./dateUtils.js";
 
@@ -39,6 +41,8 @@ type PendingEventCreation = {
 };
 
 const PENDING_EVENT_TTL_MS = 15 * 60_000;
+const EVENT_THUMBNAIL_FILE_NAME = "icon_calender.png";
+const EVENT_THUMBNAIL_PATH = resolve(process.cwd(), "assets", EVENT_THUMBNAIL_FILE_NAME);
 const pendingEventCreations = new Map<string, PendingEventCreation>();
 
 function isGuildTextChannel(channel: unknown): channel is GuildTextBasedChannel {
@@ -93,6 +97,10 @@ function buildStaticMapUrl(location: string): string | null {
     key: config.googleMapsApiKey
   });
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
+}
+
+function buildEventThumbnailAttachment(): AttachmentBuilder {
+  return new AttachmentBuilder(EVENT_THUMBNAIL_PATH, { name: EVENT_THUMBNAIL_FILE_NAME });
 }
 
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
@@ -230,15 +238,15 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
   const staticMapUrl = buildStaticMapUrl(state.location);
   const embed = new EmbedBuilder()
     .setColor(0xe33555)
+    .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
     .addFields(
       { name: "📌 イベント名", value: state.title },
       { name: "🗓️ 開催日時", value: candidate.label },
-      { name: "📍 開催場所", value: buildLocationValue(state.location, venueUrl) },
       { name: "💰 今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
       { name: "🧾 利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
-      { name: "🔗 元メッセージ", value: `[日程調整結果](${state.sourceMessageUrl})` }
+      { name: "📍 開催場所", value: buildLocationValue(state.location, venueUrl) }
     )
-    .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
+    .setFooter({ text: `元メッセージ: ${state.sourceMessageUrl}\nみんなもポケモン、ゲットじゃぞ～！` });
 
   if (staticMapUrl) {
     embed.setImage(staticMapUrl);
@@ -260,7 +268,12 @@ async function createFromCandidate(
   interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
   state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
   candidate: EventCandidate
-): Promise<{ content: string; embeds: EmbedBuilder[]; allowedMentions: { parse: ("everyone")[] } }> {
+): Promise<{
+  content: string;
+  embeds: EmbedBuilder[];
+  files: AttachmentBuilder[];
+  allowedMentions: { parse: ("everyone")[] };
+}> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
     throw new Error("サーバー内で使うコマンドじゃ。");
   }
@@ -268,6 +281,7 @@ async function createFromCandidate(
   return {
     content: "@everyone\n開催情報が確定したぞ。確認しておくんじゃ。",
     embeds: [buildEventInfoEmbed(state, candidate)],
+    files: [buildEventThumbnailAttachment()],
     allowedMentions: { parse: ["everyone"] }
   };
 }
