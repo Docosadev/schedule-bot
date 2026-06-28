@@ -312,6 +312,10 @@ function renderCreatePage(token: string): string {
             status.textContent = "候補日は最大10件までです。";
             return;
           }
+          if (isDeadlinePastOrNow()) {
+            status.textContent = "締切は現在より後の日時にしてください。";
+            return;
+          }
 
           submitButton.disabled = true;
           status.textContent = "投稿しています...";
@@ -389,6 +393,15 @@ function renderCreatePage(token: string): string {
 
         function toDateKey(date) {
           return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+        }
+
+        function isDeadlinePastOrNow() {
+          const deadlineDate = deadlineDateInput.value;
+          const deadlineTime = deadlineTimeInput.value;
+          if (!deadlineDate || !deadlineTime) {
+            return false;
+          }
+          return new Date(deadlineDate + "T" + deadlineTime).getTime() <= Date.now();
         }
 
         function escapeHtml(value) {
