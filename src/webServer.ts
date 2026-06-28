@@ -132,12 +132,14 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
   }
 
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/healthz") {
+    logHealthCheck(request, url.pathname, 200);
     sendJson(response, 200, { ok: true }, request.method === "HEAD");
     return;
   }
 
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/readyz") {
     const ready = client.isReady();
+    logHealthCheck(request, url.pathname, ready ? 200 : 503);
     sendJson(response, ready ? 200 : 503, { ok: ready, discordReady: ready }, request.method === "HEAD");
     return;
   }
@@ -180,6 +182,12 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown, h
     "cache-control": "no-store"
   });
   response.end(headOnly ? undefined : JSON.stringify(body));
+}
+
+function logHealthCheck(request: IncomingMessage, path: string, statusCode: number): void {
+  const userAgent = request.headers["user-agent"] ?? "";
+  const forwardedFor = request.headers["x-forwarded-for"] ?? "";
+  console.log(`health check ${request.method} ${path} ${statusCode} ua="${userAgent}" forwarded="${forwardedFor}"`);
 }
 
 function isPublishErrorResult(result: unknown): result is PublishErrorResult {
