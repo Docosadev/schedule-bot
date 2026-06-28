@@ -26,6 +26,7 @@ type TextLayer = {
   top: number;
   width?: number;
   align?: "left" | "center";
+  anchor?: "topLeft" | "center";
   fontSize: number;
   color?: string;
   weight?: "regular" | "bold";
@@ -64,12 +65,19 @@ async function renderTextLayer(layer: TextLayer): Promise<{ input: Buffer; left:
   const metadata = await renderer.metadata();
   const input = await renderer.toBuffer();
   const renderedWidth = metadata.width ?? layer.width ?? 0;
-  const left =
-    layer.align === "center" && layer.width
-      ? Math.round(layer.left + Math.max(0, layer.width - renderedWidth) / 2)
-      : Math.round(layer.left);
+  const renderedHeight = metadata.height ?? 0;
+  const left = (() => {
+    if (layer.anchor === "center") {
+      return Math.round(layer.left - renderedWidth / 2);
+    }
+    if (layer.align === "center" && layer.width) {
+      return Math.round(layer.left + Math.max(0, layer.width - renderedWidth) / 2);
+    }
+    return Math.round(layer.left);
+  })();
+  const top = layer.anchor === "center" ? Math.round(layer.top - renderedHeight / 2) : Math.round(layer.top);
 
-  return { input, left, top: Math.round(layer.top) };
+  return { input, left, top };
 }
 
 export async function buildResultMatrixImage(
@@ -165,10 +173,9 @@ export async function buildResultMatrixImage(
                 const style = status ? STATUS_STYLES[status] : null;
                 textLayers.push({
                   text: style?.label ?? "-",
-                  left: x,
-                  top: y + (style ? 8 : 13),
-                  width: optionColumnWidth,
-                  align: "center",
+                  left: x + optionColumnWidth / 2,
+                  top: y + rowHeight / 2,
+                  anchor: "center",
                   fontSize: style ? 25 : 17,
                   color: style?.color ?? "#8c959f",
                   weight: "bold"
