@@ -182,11 +182,11 @@ BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
 DOCOSA_MENTION=
 WEB_HOST=0.0.0.0
-WEB_PORT=3000
 ```
 
 Renderでは `WEB_BASE_URL` は初回から省略できます。
 省略した場合、Renderが自動で用意する `RENDER_EXTERNAL_URL` を使って `/schedule` の作成画面URLを生成します。
+`WEB_PORT` も省略し、Renderが自動で設定する `PORT` を使います。
 独自ドメインなどに変えたい場合だけ、`WEB_BASE_URL=https://your-domain.example` を追加してください。
 
 ### UptimeRobotでスリープ対策
