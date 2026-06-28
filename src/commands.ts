@@ -64,7 +64,7 @@ export const scheduleAdminCommand = new SlashCommandBuilder()
 
 export const createEventCommand = new SlashCommandBuilder()
   .setName("create-event")
-  .setDescription("日程調整結果からDiscordイベントを作成します")
+  .setDescription("日程調整結果から開催情報のまとめを投稿します")
   .addIntegerOption((option) =>
     option
       .setName("price")
@@ -82,8 +82,15 @@ export const createEventCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("location")
-      .setDescription("会場URLまたは場所")
+      .setDescription("開催場所名、住所、または会場URL")
       .setRequired(true)
+      .setMaxLength(500)
+  )
+  .addStringOption((option) =>
+    option
+      .setName("venue_url")
+      .setDescription("会場リンク。locationにURLを入れた場合は省略できます")
+      .setRequired(false)
       .setMaxLength(500)
   )
   .addStringOption((option) =>
@@ -93,7 +100,7 @@ export const createEventCommand = new SlashCommandBuilder()
       .setRequired(false)
       .setMaxLength(200)
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.CreateEvents);
+  .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
 export const commands = [scheduleCommand.toJSON(), scheduleAdminCommand.toJSON(), createEventCommand.toJSON()];
 

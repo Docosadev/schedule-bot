@@ -1,8 +1,7 @@
 import {
   ActionRowBuilder,
   ChatInputCommandInteraction,
-  GuildScheduledEventEntityType,
-  GuildScheduledEventPrivacyLevel,
+  EmbedBuilder,
   GuildTextBasedChannel,
   Message,
   MessageFlags,
@@ -11,7 +10,6 @@ import {
   StringSelectMenuInteraction
 } from "discord.js";
 import { randomUUID } from "node:crypto";
-import { getCreatedEventBySourceMessage, recordCreatedEvent } from "./db.js";
 import { parseLocalDateTime } from "./dateUtils.js";
 
 type EventCandidate = {
@@ -28,14 +26,13 @@ type ParsedResultMessage = {
 type PendingEventCreation = {
   token: string;
   userId: string;
-  channelId: string;
-  sourceMessageId: string;
   sourceMessageUrl: string;
   title: string;
   candidates: EventCandidate[];
   price: number;
   attendees: number;
   location: string;
+  venueUrl: string | null;
   fee: number;
   createdAt: number;
 };
@@ -51,12 +48,8 @@ function formatYen(amount: number): string {
   return new Intl.NumberFormat("ja-JP").format(amount);
 }
 
-function makeEventUrl(guildId: string, scheduledEventId: string): string {
-  return `https://discord.com/events/${guildId}/${scheduledEventId}`;
-}
-
-function truncate(value: string, maxLength: number): string {
-  return value.length > maxLength ? `${value.slice(0, Math.max(0, maxLength - 1))}…` : value;
+function isProbablyUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value.trim());
 }
 
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
@@ -83,12 +76,12 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
       continue;
     }
 
-    const candidateMatch = normalized.match(/^>\s*##\s+(\d{4}-\d{2}-\d{2})\([^)]+\)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    const candidateMatch = normalized.match(/^>\s*##\s+(\d{4}-\d{2}-\d{2})\(([^)]+)\)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
     if (!candidateMatch) {
       continue;
     }
 
-    const [, date, startTime, endTime] = candidateMatch;
+    const [, date, weekday, startTime, endTime] = candidateMatch;
     const startAt = parseLocalDateTime(`${date} ${startTime}`);
     const endAt = parseLocalDateTime(`${date} ${endTime}`);
     if (!startAt || !endAt) {
@@ -97,7 +90,7 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
 
     const normalizedEndAt = endAt.getTime() <= startAt.getTime() ? new Date(endAt.getTime() + 24 * 60 * 60_000) : endAt;
     candidates.push({
-      label: `${date} ${startTime}-${endTime}`,
+      label: `${date}(${weekday}) ${startTime}-${endTime}`,
       startAt,
       endAt: normalizedEndAt
     });
@@ -167,118 +160,48 @@ function assertCreateEventPermissions(interaction: ChatInputCommandInteraction):
     throw new Error("サーバー内で使うコマンドじゃ。");
   }
 
-  if (!interaction.memberPermissions?.has(PermissionFlagsBits.CreateEvents)) {
-    throw new Error("このコマンドはイベントを作成できる者だけが使えるのじゃ。");
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.SendMessages)) {
+    throw new Error("このコマンドはメッセージを送れる者だけが使えるのじゃ。");
   }
 
   const botMember = interaction.guild.members.me;
-  if (!botMember?.permissions.has(PermissionFlagsBits.CreateEvents)) {
+  if (!botMember) {
     throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
   }
 
   if (isGuildTextChannel(interaction.channel)) {
     const permissions = interaction.channel.permissionsFor(botMember);
-    if (!permissions?.has(PermissionFlagsBits.ReadMessageHistory) || !permissions.has(PermissionFlagsBits.SendMessages)) {
+    if (
+      !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
+      !permissions.has(PermissionFlagsBits.SendMessages) ||
+      !permissions.has(PermissionFlagsBits.EmbedLinks)
+    ) {
       throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
     }
   }
 }
 
-function buildDescription(params: {
-  fee: number;
-  price: number;
-  attendees: number;
-  location: string;
-  sourceMessageUrl: string;
-}): string {
-  return [
-    "開催場所と日時です。会場の詳細な場所はリンクを参照してください。",
-    `今回の参加費：${formatYen(params.fee)}円`,
-    `利用総額：${formatYen(params.price)}円 / 現地参加：${params.attendees}人`,
-    `会場リンク：${params.location}`,
-    `(元メッセージ: ${params.sourceMessageUrl})`
-  ].join("\n");
-}
-
-function resolveEventLocation(location: string): string {
-  return location.length <= 100 ? location : "会場リンクは概要を参照";
-}
-
-async function createScheduledEvent(params: {
-  interaction: ChatInputCommandInteraction | StringSelectMenuInteraction;
-  sourceMessageId: string;
-  sourceChannelId: string;
-  sourceMessageUrl: string;
-  title: string;
-  candidate: EventCandidate;
-  price: number;
-  attendees: number;
-  location: string;
-  fee: number;
-}): Promise<{ eventUrl: string; alreadyCreated: boolean }> {
-  if (!params.interaction.guild || !params.interaction.guildId || !params.interaction.channelId) {
-    throw new Error("サーバー内で使うコマンドじゃ。");
-  }
-
-  const existing = await getCreatedEventBySourceMessage(params.sourceMessageId);
-  if (existing) {
-    return { eventUrl: makeEventUrl(existing.guildId, existing.scheduledEventId), alreadyCreated: true };
-  }
-
-  const scheduledEvent = await params.interaction.guild.scheduledEvents.create({
-    name: params.title,
-    scheduledStartTime: params.candidate.startAt,
-    scheduledEndTime: params.candidate.endAt,
-    privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-    entityType: GuildScheduledEventEntityType.External,
-    entityMetadata: { location: resolveEventLocation(params.location) },
-    description: truncate(
-      buildDescription({
-        fee: params.fee,
-        price: params.price,
-        attendees: params.attendees,
-        location: params.location,
-        sourceMessageUrl: params.sourceMessageUrl
-      }),
-      1000
-    ),
-    reason: "Schedule result converted to Discord event"
-  });
-
-  await recordCreatedEvent({
-    sourceMessageId: params.sourceMessageId,
-    guildId: params.interaction.guildId,
-    channelId: params.sourceChannelId,
-    scheduledEventId: scheduledEvent.id,
-    createdBy: params.interaction.user.id,
-    createdAt: new Date().toISOString()
-  });
-
-  return { eventUrl: scheduledEvent.url, alreadyCreated: false };
-}
-
-function buildSuccessMessage(title: string, fee: number, eventUrl: string): string {
-  return [
-    `イベント【${title}】の作成が完了したぞ！`,
-    `今回の現地参加費は **${formatYen(fee)}円** じゃ。`,
-    "現地参加の者は、忘れずに準備しておくれ。",
-    "",
-    eventUrl
-  ].join("\n");
-}
-
-function buildAlreadyCreatedMessage(eventUrl: string): string {
-  return [
-    "この結果からのイベントは、すでに作成済みじゃ。",
-    "必要ならこちらから確認しておくれ。",
-    "",
-    eventUrl
-  ].join("\n");
+function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">, candidate: EventCandidate): EmbedBuilder {
+  const venueLink = state.venueUrl ?? (isProbablyUrl(state.location) ? state.location : "未指定");
+  return new EmbedBuilder()
+    .setColor(0xe33555)
+    .setTitle(`${state.title} 開催情報`)
+    .setDescription("開催情報が確定したぞ。確認しておくんじゃ。")
+    .addFields(
+      { name: "タイトル", value: state.title },
+      { name: "開催日時", value: candidate.label },
+      { name: "開催場所", value: state.location },
+      { name: "今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
+      { name: "利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
+      { name: "会場リンク", value: venueLink },
+      { name: "元メッセージ", value: `[日程調整結果](${state.sourceMessageUrl})` }
+    )
+    .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
 }
 
 function formatCreateEventError(error: unknown): string {
   if (!(error instanceof Error)) {
-    return "イベント作成に失敗してしまったぞ。";
+    return "開催情報の作成に失敗してしまったぞ。";
   }
   if (/Missing Permissions|Missing Access|権限/.test(error.message)) {
     return "これはいかん、BOTの権限が足りんようじゃ。";
@@ -290,20 +213,12 @@ async function createFromCandidate(
   interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
   state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
   candidate: EventCandidate
-): Promise<string> {
-  const result = await createScheduledEvent({
-    interaction,
-    sourceMessageId: state.sourceMessageId,
-    sourceChannelId: state.channelId,
-    sourceMessageUrl: state.sourceMessageUrl,
-    title: state.title,
-    candidate,
-    price: state.price,
-    attendees: state.attendees,
-    location: state.location,
-    fee: state.fee
-  });
-  return result.alreadyCreated ? buildAlreadyCreatedMessage(result.eventUrl) : buildSuccessMessage(state.title, state.fee, result.eventUrl);
+): Promise<{ content: string; embeds: EmbedBuilder[] }> {
+  if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
+    throw new Error("サーバー内で使うコマンドじゃ。");
+  }
+
+  return { content: "", embeds: [buildEventInfoEmbed(state, candidate)] };
 }
 
 function buildCandidateSelect(state: PendingEventCreation): ActionRowBuilder<StringSelectMenuBuilder> {
@@ -326,6 +241,7 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
   const price = interaction.options.getInteger("price", true);
   const attendees = interaction.options.getInteger("attendees", true);
   const location = interaction.options.getString("location", true).trim();
+  const venueUrl = interaction.options.getString("venue_url")?.trim() || null;
 
   if (attendees <= 0) {
     await interaction.reply({ content: "これこれ、参加人数に0は指定できんぞ。", flags: MessageFlags.Ephemeral });
@@ -351,21 +267,14 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
     }
 
     const fee = Math.ceil(price / attendees);
-    const existing = await getCreatedEventBySourceMessage(sourceMessage.id);
-    if (existing) {
-      await interaction.editReply(buildAlreadyCreatedMessage(makeEventUrl(existing.guildId, existing.scheduledEventId)));
-      return;
-    }
-
     const baseState = {
       userId: interaction.user.id,
-      channelId: sourceMessage.channelId,
-      sourceMessageId: sourceMessage.id,
       sourceMessageUrl: sourceMessage.url,
       title: parsed.title,
       price,
       attendees,
       location,
+      venueUrl,
       fee
     };
 
@@ -385,7 +294,7 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
     pendingEventCreations.set(token, state);
 
     await interaction.editReply({
-      content: "おっと、複数の候補日が見つかったぞ！どの日程を採用するんじゃ？",
+      content: "おっと、複数の候補日が見つかったぞ！どの日程で開催情報をまとめるんじゃ？",
       components: [buildCandidateSelect(state)]
     });
   } catch (error) {
@@ -419,11 +328,11 @@ export async function handleCreateEventSelection(interaction: StringSelectMenuIn
 
   pendingEventCreations.delete(token);
   await interaction.deferUpdate();
-  await interaction.message.edit({ content: "イベントを作成しておるぞ。少し待つのじゃ。", components: [] });
+  await interaction.message.edit({ content: "開催情報をまとめておるぞ。少し待つのじゃ。", components: [] });
 
   try {
     const message = await createFromCandidate(interaction, state, candidate);
-    await interaction.message.edit({ content: message, components: [] });
+    await interaction.message.edit({ ...message, components: [] });
   } catch (error) {
     await interaction.message.edit({ content: formatCreateEventError(error), components: [] });
   }
