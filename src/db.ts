@@ -17,16 +17,6 @@ export type VoteSnapshot = {
   status: VoteStatus;
 };
 
-export type CalendarEventRecord = {
-  token: string;
-  title: string;
-  startsAt: string;
-  endsAt: string;
-  location: string;
-  venueUrl: string | null;
-  createdAt: string;
-};
-
 let sqliteDb: Database.Database | null = null;
 let postgresPool: Pool | null = null;
 
@@ -118,16 +108,6 @@ function migrateSqlite(): void {
       PRIMARY KEY (poll_id, option_id, user_id)
     );
 
-    CREATE TABLE IF NOT EXISTS calendar_events (
-      token TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      starts_at TEXT NOT NULL,
-      ends_at TEXT NOT NULL,
-      location TEXT NOT NULL,
-      venue_url TEXT,
-      created_at TEXT NOT NULL
-    );
-
     CREATE INDEX IF NOT EXISTS idx_polls_status_deadline ON polls(status, deadline);
     CREATE INDEX IF NOT EXISTS idx_votes_poll ON votes(poll_id);
   `);
@@ -181,16 +161,6 @@ async function migratePostgres(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'yes',
       created_at TEXT NOT NULL,
       PRIMARY KEY (poll_id, option_id, user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS calendar_events (
-      token TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      starts_at TEXT NOT NULL,
-      ends_at TEXT NOT NULL,
-      location TEXT NOT NULL,
-      venue_url TEXT,
-      created_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_polls_status_deadline ON polls(status, deadline);
@@ -257,18 +227,6 @@ function mapOption(row: Record<string, unknown>): PollOption {
     emoji: String(row.emoji),
     startsAt: String(row.starts_at),
     label: String(row.label)
-  };
-}
-
-function mapCalendarEvent(row: Record<string, unknown>): CalendarEventRecord {
-  return {
-    token: String(row.token),
-    title: String(row.title),
-    startsAt: String(row.starts_at),
-    endsAt: String(row.ends_at),
-    location: String(row.location),
-    venueUrl: row.venue_url ? String(row.venue_url) : null,
-    createdAt: String(row.created_at)
   };
 }
 
@@ -376,40 +334,6 @@ export async function updatePollMessageId(pollId: string, messageId: string): Pr
     return;
   }
   getSqlite().prepare("UPDATE polls SET message_id = ? WHERE id = ?").run(messageId, pollId);
-}
-
-export async function createCalendarEvent(record: CalendarEventRecord): Promise<void> {
-  if (usePostgres()) {
-    await getPostgresPool().query(
-      `
-        INSERT INTO calendar_events (token, title, starts_at, ends_at, location, venue_url, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `,
-      [record.token, record.title, record.startsAt, record.endsAt, record.location, record.venueUrl, record.createdAt]
-    );
-    return;
-  }
-
-  getSqlite()
-    .prepare(
-      `
-        INSERT INTO calendar_events (token, title, starts_at, ends_at, location, venue_url, created_at)
-        VALUES (@token, @title, @startsAt, @endsAt, @location, @venueUrl, @createdAt)
-      `
-    )
-    .run(record);
-}
-
-export async function getCalendarEvent(token: string): Promise<CalendarEventRecord | null> {
-  if (usePostgres()) {
-    const row = (await getPostgresPool().query("SELECT * FROM calendar_events WHERE token = $1", [token])).rows[0];
-    return row ? mapCalendarEvent(row) : null;
-  }
-
-  const row = getSqlite()
-    .prepare("SELECT * FROM calendar_events WHERE token = ?")
-    .get(token) as Record<string, unknown> | undefined;
-  return row ? mapCalendarEvent(row) : null;
 }
 
 export async function updateVoterMessageId(pollId: string, messageId: string): Promise<void> {

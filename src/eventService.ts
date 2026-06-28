@@ -1,8 +1,6 @@
 import {
   ActionRowBuilder,
   AttachmentBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildTextBasedChannel,
@@ -16,7 +14,6 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { config } from "./config.js";
 import { parseLocalDateTime } from "./dateUtils.js";
-import { createCalendarEvent } from "./db.js";
 
 type EventCandidate = {
   label: string;
@@ -107,24 +104,6 @@ function buildStaticMapUrl(location: string): string | null {
 
 function buildEventThumbnailAttachment(): AttachmentBuilder {
   return new AttachmentBuilder(EVENT_THUMBNAIL_PATH, { name: EVENT_THUMBNAIL_FILE_NAME });
-}
-
-function createToken(): string {
-  return randomUUID().replace(/-/g, "");
-}
-
-function buildCalendarUrl(token: string): string {
-  return new URL(`/calendar/${token}.ics`, config.webBaseUrl).toString();
-}
-
-function buildCalendarButton(token: string): ActionRowBuilder<ButtonBuilder> {
-  const button = new ButtonBuilder()
-    .setStyle(ButtonStyle.Link)
-    .setLabel("カレンダーに追加")
-    .setEmoji("📅")
-    .setURL(buildCalendarUrl(token));
-
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 }
 
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
@@ -263,6 +242,7 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
   const embed = new EmbedBuilder()
     .setColor(0xe33555)
     .setTitle(state.title)
+    .setDescription("\u200B")
     .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
     .addFields(
       { name: "🗓️ 開催日時", value: addLightSpacing(candidate.label) },
@@ -296,29 +276,16 @@ async function createFromCandidate(
   content: string;
   embeds: EmbedBuilder[];
   files: AttachmentBuilder[];
-  components: ActionRowBuilder<ButtonBuilder>[];
   allowedMentions: { parse: ("everyone")[] };
 }> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
     throw new Error("サーバー内で使うコマンドじゃ。");
   }
 
-  const calendarToken = createToken();
-  await createCalendarEvent({
-    token: calendarToken,
-    title: state.title,
-    startsAt: candidate.startAt.toISOString(),
-    endsAt: candidate.endAt.toISOString(),
-    location: state.location,
-    venueUrl: resolveVenueUrl(state.location, state.venueUrl),
-    createdAt: new Date().toISOString()
-  });
-
   return {
     content: "@everyone\n開催情報が確定したぞ。確認しておくんじゃ。",
     embeds: [buildEventInfoEmbed(state, candidate)],
     files: [buildEventThumbnailAttachment()],
-    components: [buildCalendarButton(calendarToken)],
     allowedMentions: { parse: ["everyone"] }
   };
 }

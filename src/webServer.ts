@@ -1,8 +1,6 @@
 import type { Client } from "discord.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { buildIcs } from "./calendar.js";
 import { config } from "./config.js";
-import { getCalendarEvent } from "./db.js";
 import { isGuildTextChannel, publishSchedulePoll } from "./pollService.js";
 import { REMINDER_CHOICES, normalizeReminderMinutes } from "./reminders.js";
 import { consumeWebSession, getWebSession } from "./webSessions.js";
@@ -34,18 +32,6 @@ export function startWebServer(client: Client): void {
 
 async function handleRequest(client: Client, request: IncomingMessage, response: ServerResponse): Promise<void> {
   const url = new URL(request.url ?? "/", config.webBaseUrl);
-
-  const calendarToken = parseCalendarToken(url.pathname);
-  if ((request.method === "GET" || request.method === "HEAD") && calendarToken) {
-    const event = await getCalendarEvent(calendarToken);
-    if (!event) {
-      sendHtml(response, 404, renderNotFoundPage(), request.method === "HEAD");
-      return;
-    }
-
-    sendIcs(response, buildIcs(event), request.method === "HEAD");
-    return;
-  }
 
   if (request.method === "GET" && url.pathname === "/schedule/new") {
     const token = url.searchParams.get("token") ?? "";
@@ -195,20 +181,6 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown, h
     "cache-control": "no-store"
   });
   response.end(headOnly ? undefined : JSON.stringify(body));
-}
-
-function sendIcs(response: ServerResponse, body: string, headOnly = false): void {
-  response.writeHead(200, {
-    "content-type": "text/calendar; charset=utf-8; method=PUBLISH",
-    "content-disposition": 'attachment; filename="schedule-event.ics"',
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff"
-  });
-  response.end(headOnly ? undefined : body);
-}
-
-function parseCalendarToken(pathname: string): string | null {
-  return pathname.match(/^\/calendar\/([a-f0-9]{32})\.ics$/i)?.[1] ?? null;
 }
 
 function logHealthCheck(request: IncomingMessage, path: string, statusCode: number): void {
