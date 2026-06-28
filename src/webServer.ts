@@ -126,8 +126,8 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
     return;
   }
 
-  if (request.method === "GET" && url.pathname === "/") {
-    sendHtml(response, 200, renderIndexPage());
+  if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/") {
+    sendHtml(response, 200, renderIndexPage(), request.method === "HEAD");
     return;
   }
 
@@ -166,12 +166,12 @@ function readJsonBody<T>(request: IncomingMessage): Promise<T> {
   });
 }
 
-function sendHtml(response: ServerResponse, statusCode: number, html: string): void {
+function sendHtml(response: ServerResponse, statusCode: number, html: string, headOnly = false): void {
   response.writeHead(statusCode, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store"
   });
-  response.end(html);
+  response.end(headOnly ? undefined : html);
 }
 
 function sendJson(response: ServerResponse, statusCode: number, body: unknown, headOnly = false): void {
