@@ -15,6 +15,8 @@ Discord 用の日程調整 BOT です。
 - 締切前リマインドを複数設定可能
 - 締切時に Discord リアクションを再取得して集計
 - 結果通知にロールメンションと投票マトリクス画像を添付
+- 日程調整結果から Discord 公式イベントを自動作成
+- 利用総額と現地参加人数から参加費を自動計算
 - 手動締切、締切延長、キャンセル、削除
 - 削除時に関連 Discord メッセージも削除
 - SQLite または Postgres/Neon にアンケート情報を保存
@@ -67,9 +69,11 @@ Bot に以下の権限を付けてサーバーへ招待します。
 - Add Reactions
 - Read Message History
 - Manage Messages
+- Create Events
 - Use Slash Commands
 
 `Manage Messages` は、同じ候補日に複数リアクションが付いたとき、BOTが余分なリアクションを外すために必要です。
+`Create Events` は `/create-event` で Discord 公式イベントを作成するために必要です。
 
 ### 4. コマンド登録
 
@@ -220,6 +224,34 @@ ID: poll_xxx
 アンケート情報と関連 Discord メッセージを削除します。
 すでに手動削除済みのメッセージは無視します。
 
+### `/create-event price:5500 attendees:3 location:https://example.com`
+
+直近100件のメッセージから日程調整結果を探し、Discord公式イベントを作成します。
+
+主な挙動:
+
+- `price / attendees` を切り上げて参加費を計算
+- 日程調整結果が1件ならそのままイベント作成
+- 同票などで複数候補がある場合は、実行者だけが選べるセレクトメニューを表示
+- 同じ結果メッセージからの二重作成を防止
+- 会場URLが長い場合は、イベントの場所には短い案内を入れ、URL本体は概要に記載
+
+対象メッセージを明示したい場合は `message_url` を指定できます。
+
+```text
+/create-event price:5500 attendees:3 location:https://example.com message_url:https://discord.com/channels/...
+```
+
+完了メッセージ例:
+
+```text
+イベント【定例会】の作成が完了したぞ！
+今回の現地参加費は **1,834円** じゃ。
+現地参加の者は、忘れずに準備しておくれ。
+
+https://discord.com/events/...
+```
+
 ## 動作確認
 
 1. `.env` を設定する
@@ -230,6 +262,7 @@ ID: poll_xxx
 6. 候補日に `⭕ / ❌ / 🔺` を付ける
 7. 投票済みメッセージが更新されることを確認する
 8. `/schedule-admin close` で結果と画像を確認する
+9. `/create-event` で公式イベントが作成されることを確認する
 
 ## 注意点
 

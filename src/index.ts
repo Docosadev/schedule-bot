@@ -5,9 +5,10 @@ import {
   MessageFlags,
   Partials
 } from "discord.js";
-import { handleScheduleAdminCommand, handleScheduleCommand } from "./commands.js";
+import { handleCreateEventSlashCommand, handleScheduleAdminCommand, handleScheduleCommand } from "./commands.js";
 import { config } from "./config.js";
 import { migrate } from "./db.js";
+import { handleCreateEventSelection } from "./eventService.js";
 import { checkDuePolls, checkReminders, handleReactionAdd, handleReactionRemove } from "./pollService.js";
 import { startWebServer } from "./webServer.js";
 
@@ -34,21 +35,34 @@ client.once(Events.ClientReady, (readyClient) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) {
-    return;
-  }
-
   try {
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith("create_event:")) {
+      await handleCreateEventSelection(interaction);
+      return;
+    }
+
+    if (!interaction.isChatInputCommand()) {
+      return;
+    }
+
     if (interaction.commandName === "schedule") {
       await handleScheduleCommand(interaction);
       return;
     }
     if (interaction.commandName === "schedule-admin") {
       await handleScheduleAdminCommand(interaction);
+      return;
+    }
+    if (interaction.commandName === "create-event") {
+      await handleCreateEventSlashCommand(interaction);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "なにやら予期せぬエラーが起きたようじゃ。";
     try {
+      if (!interaction.isRepliable()) {
+        console.error("interaction is not repliable", error);
+        return;
+      }
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
       } else {

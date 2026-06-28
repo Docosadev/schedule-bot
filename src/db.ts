@@ -17,6 +17,15 @@ export type VoteSnapshot = {
   status: VoteStatus;
 };
 
+export type CreatedEventRecord = {
+  sourceMessageId: string;
+  guildId: string;
+  channelId: string;
+  scheduledEventId: string;
+  createdBy: string;
+  createdAt: string;
+};
+
 let sqliteDb: Database.Database | null = null;
 let postgresPool: Pool | null = null;
 
@@ -108,6 +117,15 @@ function migrateSqlite(): void {
       PRIMARY KEY (poll_id, option_id, user_id)
     );
 
+    CREATE TABLE IF NOT EXISTS created_events (
+      source_message_id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      scheduled_event_id TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_polls_status_deadline ON polls(status, deadline);
     CREATE INDEX IF NOT EXISTS idx_votes_poll ON votes(poll_id);
   `);
@@ -161,6 +179,15 @@ async function migratePostgres(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'yes',
       created_at TEXT NOT NULL,
       PRIMARY KEY (poll_id, option_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS created_events (
+      source_message_id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      scheduled_event_id TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_polls_status_deadline ON polls(status, deadline);
@@ -227,6 +254,17 @@ function mapOption(row: Record<string, unknown>): PollOption {
     emoji: String(row.emoji),
     startsAt: String(row.starts_at),
     label: String(row.label)
+  };
+}
+
+function mapCreatedEvent(row: Record<string, unknown>): CreatedEventRecord {
+  return {
+    sourceMessageId: String(row.source_message_id),
+    guildId: String(row.guild_id),
+    channelId: String(row.channel_id),
+    scheduledEventId: String(row.scheduled_event_id),
+    createdBy: String(row.created_by),
+    createdAt: String(row.created_at)
   };
 }
 
@@ -334,6 +372,46 @@ export async function updatePollMessageId(pollId: string, messageId: string): Pr
     return;
   }
   getSqlite().prepare("UPDATE polls SET message_id = ? WHERE id = ?").run(messageId, pollId);
+}
+
+export async function getCreatedEventBySourceMessage(sourceMessageId: string): Promise<CreatedEventRecord | null> {
+  if (usePostgres()) {
+    const row = (await getPostgresPool().query("SELECT * FROM created_events WHERE source_message_id = $1", [sourceMessageId]))
+      .rows[0];
+    return row ? mapCreatedEvent(row) : null;
+  }
+
+  const row = getSqlite()
+    .prepare("SELECT * FROM created_events WHERE source_message_id = ?")
+    .get(sourceMessageId) as Record<string, unknown> | undefined;
+  return row ? mapCreatedEvent(row) : null;
+}
+
+export async function recordCreatedEvent(record: CreatedEventRecord): Promise<void> {
+  if (usePostgres()) {
+    await getPostgresPool().query(
+      `
+        INSERT INTO created_events (
+          source_message_id, guild_id, channel_id, scheduled_event_id, created_by, created_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (source_message_id) DO NOTHING
+      `,
+      [record.sourceMessageId, record.guildId, record.channelId, record.scheduledEventId, record.createdBy, record.createdAt]
+    );
+    return;
+  }
+
+  getSqlite()
+    .prepare(
+      `
+        INSERT OR IGNORE INTO created_events (
+          source_message_id, guild_id, channel_id, scheduled_event_id, created_by, created_at
+        )
+        VALUES (@sourceMessageId, @guildId, @channelId, @scheduledEventId, @createdBy, @createdAt)
+      `
+    )
+    .run(record);
 }
 
 export async function updateVoterMessageId(pollId: string, messageId: string): Promise<void> {

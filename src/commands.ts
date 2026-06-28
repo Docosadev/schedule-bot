@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { config } from "./config.js";
 import { getOpenPolls, getPoll } from "./db.js";
+import { handleCreateEventCommand } from "./eventService.js";
 import {
   closePollByCommand,
   deletePollByCommand,
@@ -61,7 +62,40 @@ export const scheduleAdminCommand = new SlashCommandBuilder()
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
-export const commands = [scheduleCommand.toJSON(), scheduleAdminCommand.toJSON()];
+export const createEventCommand = new SlashCommandBuilder()
+  .setName("create-event")
+  .setDescription("日程調整結果からDiscordイベントを作成します")
+  .addIntegerOption((option) =>
+    option
+      .setName("price")
+      .setDescription("貸会議室などの利用総額")
+      .setRequired(true)
+      .setMinValue(0)
+  )
+  .addIntegerOption((option) =>
+    option
+      .setName("attendees")
+      .setDescription("現地参加人数")
+      .setRequired(true)
+      .setMinValue(1)
+  )
+  .addStringOption((option) =>
+    option
+      .setName("location")
+      .setDescription("会場URLまたは場所")
+      .setRequired(true)
+      .setMaxLength(500)
+  )
+  .addStringOption((option) =>
+    option
+      .setName("message_url")
+      .setDescription("対象の結果メッセージURL。省略時は直近100件から探します")
+      .setRequired(false)
+      .setMaxLength(200)
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.CreateEvents);
+
+export const commands = [scheduleCommand.toJSON(), scheduleAdminCommand.toJSON(), createEventCommand.toJSON()];
 
 export async function handleScheduleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId || !interaction.channelId) {
@@ -139,4 +173,8 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
   if (subcommand === "delete") {
     await deletePollByCommand(interaction);
   }
+}
+
+export async function handleCreateEventSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  await handleCreateEventCommand(interaction);
 }
