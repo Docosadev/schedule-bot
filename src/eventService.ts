@@ -95,7 +95,7 @@ function buildStaticMapUrl(location: string): string | null {
   const params = new URLSearchParams({
     center: location,
     zoom: "16",
-    size: "640x320",
+    size: "640x400",
     scale: "2",
     language: "ja",
     region: "JP",
