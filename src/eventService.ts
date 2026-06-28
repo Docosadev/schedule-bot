@@ -52,6 +52,13 @@ function isProbablyUrl(value: string): boolean {
   return /^https?:\/\//i.test(value.trim());
 }
 
+function buildLocationValue(location: string, venueUrl: string | null): string {
+  if (!venueUrl || venueUrl === location) {
+    return location;
+  }
+  return `${location}\n${venueUrl}`;
+}
+
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
   const match = input.match(/discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
   if (!match) {
@@ -174,7 +181,8 @@ function assertCreateEventPermissions(interaction: ChatInputCommandInteraction):
     if (
       !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
       !permissions.has(PermissionFlagsBits.SendMessages) ||
-      !permissions.has(PermissionFlagsBits.EmbedLinks)
+      !permissions.has(PermissionFlagsBits.EmbedLinks) ||
+      !permissions.has(PermissionFlagsBits.MentionEveryone)
     ) {
       throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
     }
@@ -182,18 +190,15 @@ function assertCreateEventPermissions(interaction: ChatInputCommandInteraction):
 }
 
 function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">, candidate: EventCandidate): EmbedBuilder {
-  const venueLink = state.venueUrl ?? (isProbablyUrl(state.location) ? state.location : "未指定");
+  const venueUrl = state.venueUrl ?? (isProbablyUrl(state.location) ? state.location : null);
   return new EmbedBuilder()
     .setColor(0xe33555)
-    .setTitle(`${state.title} 開催情報`)
-    .setDescription("開催情報が確定したぞ。確認しておくんじゃ。")
     .addFields(
-      { name: "タイトル", value: state.title },
+      { name: "イベント名", value: state.title },
       { name: "開催日時", value: candidate.label },
-      { name: "開催場所", value: state.location },
+      { name: "開催場所", value: buildLocationValue(state.location, venueUrl) },
       { name: "今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
       { name: "利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
-      { name: "会場リンク", value: venueLink },
       { name: "元メッセージ", value: `[日程調整結果](${state.sourceMessageUrl})` }
     )
     .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
@@ -213,12 +218,16 @@ async function createFromCandidate(
   interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
   state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
   candidate: EventCandidate
-): Promise<{ content: string; embeds: EmbedBuilder[] }> {
+): Promise<{ content: string; embeds: EmbedBuilder[]; allowedMentions: { parse: ("everyone")[] } }> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
     throw new Error("サーバー内で使うコマンドじゃ。");
   }
 
-  return { content: "", embeds: [buildEventInfoEmbed(state, candidate)] };
+  return {
+    content: "@everyone\n開催情報が確定したぞ。確認しておくんじゃ。",
+    embeds: [buildEventInfoEmbed(state, candidate)],
+    allowedMentions: { parse: ["everyone"] }
+  };
 }
 
 function buildCandidateSelect(state: PendingEventCreation): ActionRowBuilder<StringSelectMenuBuilder> {

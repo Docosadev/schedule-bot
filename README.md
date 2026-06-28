@@ -69,9 +69,11 @@ Bot に以下の権限を付けてサーバーへ招待します。
 - Add Reactions
 - Read Message History
 - Manage Messages
+- Mention Everyone
 - Use Slash Commands
 
 `Manage Messages` は、同じ候補日に複数リアクションが付いたとき、BOTが余分なリアクションを外すために必要です。
+`Mention Everyone` は、開催情報の確定通知で `@everyone` を送るために必要です。
 
 ### 4. コマンド登録
 
@@ -243,15 +245,17 @@ ID: poll_xxx
 完了メッセージ例:
 
 ```text
+@everyone
 開催情報が確定したぞ。確認しておくんじゃ。
 
 [埋め込み]
-タイトル: 定例会
+イベント名: 定例会
 開催日時: 2026-07-03(金) 13:00-18:00
 開催場所: 会場名
+          https://example.com
 今回の参加費: 1,834円
 利用総額 / 現地参加: 5,500円 / 3人
-会場リンク: https://example.com
+元メッセージ: 日程調整結果
 
 みんなもポケモン、ゲットじゃぞ～！
 ```
