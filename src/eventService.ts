@@ -102,10 +102,6 @@ function buildEventThumbnailAttachment(): AttachmentBuilder {
   return new AttachmentBuilder(EVENT_THUMBNAIL_PATH, { name: EVENT_THUMBNAIL_FILE_NAME });
 }
 
-function buildEmbedSpacer(): { name: string; value: string } {
-  return { name: "\u200B", value: "\u200B" };
-}
-
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
   const match = input.match(/discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
   if (!match) {
@@ -245,10 +241,8 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
     .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
     .addFields(
       { name: "🗓️ 開催日時", value: candidate.label },
-      buildEmbedSpacer(),
       { name: "💰 今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
       { name: "🧾 利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
-      buildEmbedSpacer(),
       { name: "📍 開催場所", value: buildLocationValue(state.location, venueUrl) }
     )
     .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
