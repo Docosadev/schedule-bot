@@ -16,8 +16,8 @@ const STATUS_STYLES = {
 
 const require = createRequire(import.meta.url);
 const FONT_FILES = {
-  regular: require.resolve("@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff2"),
-  bold: require.resolve("@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-700-normal.woff2")
+  regular: require.resolve("@expo-google-fonts/noto-sans-jp/400Regular/NotoSansJP_400Regular.ttf"),
+  bold: require.resolve("@expo-google-fonts/noto-sans-jp/700Bold/NotoSansJP_700Bold.ttf")
 };
 
 type TextLayer = {
