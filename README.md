@@ -206,6 +206,9 @@ Monitor Type: HTTP(s)
 Interval: 5 minutes
 ```
 
+`/healthz` はWebプロセスが起きているかだけを確認する軽い監視用URLです。
+Discord接続完了まで含めて確認したい場合は `/readyz` を使えますが、Renderのスリープ復帰直後にDown判定されやすいため、UptimeRobotでは `/healthz` を推奨します。
+
 ### Render無料枠での注意点
 
 - 無料Web Serviceはスリープするため、起動直後の反応が遅くなることがある

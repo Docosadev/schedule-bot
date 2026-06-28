@@ -131,8 +131,14 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
     return;
   }
 
-  if (request.method === "GET" && url.pathname === "/healthz") {
-    sendJson(response, 200, { ok: true });
+  if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/healthz") {
+    sendJson(response, 200, { ok: true }, request.method === "HEAD");
+    return;
+  }
+
+  if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/readyz") {
+    const ready = client.isReady();
+    sendJson(response, ready ? 200 : 503, { ok: ready, discordReady: ready }, request.method === "HEAD");
     return;
   }
 
@@ -168,12 +174,12 @@ function sendHtml(response: ServerResponse, statusCode: number, html: string): v
   response.end(html);
 }
 
-function sendJson(response: ServerResponse, statusCode: number, body: unknown): void {
+function sendJson(response: ServerResponse, statusCode: number, body: unknown, headOnly = false): void {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store"
   });
-  response.end(JSON.stringify(body));
+  response.end(headOnly ? undefined : JSON.stringify(body));
 }
 
 function isPublishErrorResult(result: unknown): result is PublishErrorResult {

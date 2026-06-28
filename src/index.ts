@@ -21,9 +21,10 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction, Partials.User]
 });
 
+startWebServer(client);
+
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
-  startWebServer(client);
 
   setInterval(() => {
     void checkDuePolls((channelId) => client.channels.fetch(channelId));
