@@ -29,7 +29,6 @@ type ParsedResultMessage = {
 type PendingEventCreation = {
   token: string;
   userId: string;
-  sourceMessageUrl: string;
   title: string;
   candidates: EventCandidate[];
   price: number;
@@ -101,6 +100,10 @@ function buildStaticMapUrl(location: string): string | null {
 
 function buildEventThumbnailAttachment(): AttachmentBuilder {
   return new AttachmentBuilder(EVENT_THUMBNAIL_PATH, { name: EVENT_THUMBNAIL_FILE_NAME });
+}
+
+function buildEmbedSpacer(): { name: string; value: string } {
+  return { name: "\u200B", value: "\u200B" };
 }
 
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
@@ -242,11 +245,13 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
     .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
     .addFields(
       { name: "🗓️ 開催日時", value: candidate.label },
+      buildEmbedSpacer(),
       { name: "💰 今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
       { name: "🧾 利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
+      buildEmbedSpacer(),
       { name: "📍 開催場所", value: buildLocationValue(state.location, venueUrl) }
     )
-    .setFooter({ text: `元メッセージ: ${state.sourceMessageUrl}\nみんなもポケモン、ゲットじゃぞ～！` });
+    .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
 
   if (staticMapUrl) {
     embed.setImage(staticMapUrl);
@@ -334,7 +339,6 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
     const fee = Math.ceil(price / attendees);
     const baseState = {
       userId: interaction.user.id,
-      sourceMessageUrl: sourceMessage.url,
       title: parsed.title,
       price,
       attendees,
