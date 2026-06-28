@@ -65,7 +65,7 @@ export const commands = [scheduleCommand.toJSON(), scheduleAdminCommand.toJSON()
 
 export async function handleScheduleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId || !interaction.channelId) {
-    await interaction.reply({ content: "サーバー内のテキストチャンネルで実行してください。", ephemeral: true });
+    await interaction.reply({ content: "サーバー内のテキストチャンネルで使うのじゃ。", ephemeral: true });
     return;
   }
 
@@ -78,7 +78,7 @@ export async function handleScheduleCommand(interaction: ChatInputCommandInterac
   url.searchParams.set("token", session.token);
 
   await interaction.reply({
-    content: `作成画面を開いてください。\n${url.toString()}\n\nこのリンクは30分間有効です。作成したアンケートはこのチャンネルに投稿されます。`,
+    content: `作成画面じゃ。ここから日程調整を始めるのじゃ。\n${url.toString()}\n\nこのリンクは30分だけ有効じゃ。作ったアンケートはこのチャンネルに投稿されるぞ。`,
     ephemeral: true
   });
 }
@@ -89,7 +89,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
   if (subcommand === "list") {
     const polls = (await getOpenPolls()).filter((poll) => poll.guildId === interaction.guildId);
     if (polls.length === 0) {
-      await interaction.reply({ content: "受付中のアンケートはありません。", ephemeral: true });
+      await interaction.reply({ content: "受付中のアンケートは今のところないようじゃ。", ephemeral: true });
       return;
     }
     await interaction.reply({
@@ -103,7 +103,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
     const pollId = interaction.options.getString("poll_id", true);
     const poll = await getPoll(pollId);
     if (!poll) {
-      await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
+      await interaction.reply({ content: "指定されたアンケートは見つからんかったぞ。IDをもう一度たしかめるのじゃ。", ephemeral: true });
       return;
     }
     await interaction.reply({ content: await buildPollSummary(poll), embeds: [await buildPollEmbed(poll)], ephemeral: true });
@@ -114,7 +114,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
     const pollId = interaction.options.getString("poll_id", true);
     const poll = await getPoll(pollId);
     if (!poll) {
-      await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
+      await interaction.reply({ content: "指定されたアンケートは見つからんかったぞ。IDをもう一度たしかめるのじゃ。", ephemeral: true });
       return;
     }
     await interaction.reply({ content: await buildVoterList(poll), ephemeral: true });

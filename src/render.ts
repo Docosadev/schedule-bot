@@ -3,7 +3,7 @@ import { formatDeadline } from "./dateUtils.js";
 import { getVoteBreakdown, getVoteCounts, getVotesForPoll } from "./db.js";
 import { formatReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import type { PollOption, PollWithOptions, VoteStatus } from "./types.js";
-import { VOTE_EMOJIS, VOTE_LABELS } from "./voteEmojis.js";
+import { formatVoteDefinitions, VOTE_EMOJIS, VOTE_LABELS, VOTE_MEANINGS } from "./voteEmojis.js";
 
 export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilder> {
   const breakdown = await getVoteBreakdown(poll.id);
@@ -14,7 +14,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
     const counts = breakdown.get(option.id) ?? { yes: 0, maybe: 0, no: 0 };
     return {
       name: `${option.position}. ${option.label}`,
-      value: `${VOTE_LABELS.yes} ${counts.yes} / ${VOTE_LABELS.no} ${counts.no} / ${VOTE_LABELS.maybe} ${counts.maybe}`,
+      value: `${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes}: ${counts.yes} / ${VOTE_LABELS.no} ${VOTE_MEANINGS.no}: ${counts.no} / ${VOTE_LABELS.maybe} ${VOTE_MEANINGS.maybe}: ${counts.maybe}`,
       inline: false
     };
   });
@@ -22,7 +22,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
   return new EmbedBuilder()
     .setTitle(`日程調整: ${poll.title}`)
     .setColor(poll.status === "open" ? 0x2f80ed : 0x828282)
-    .setDescription("候補ごとのメッセージにリアクションして投票してください。押し直すと投票内容が更新されます。")
+    .setDescription("候補ごとのメッセージにリアクションするのじゃ。予定が変わったら押し直してよいぞ。")
     .addFields(
       { name: "締切", value: formatDeadline(poll.deadline), inline: true },
       { name: "表示", value: visibilityLabel, inline: true },
@@ -39,7 +39,9 @@ export function buildPollHeaderMessage(poll: PollWithOptions): string {
     `ID: ${poll.id}`,
     "",
     "@everyone",
-    `下記の候補日に参加可否を${VOTE_EMOJIS.yes} / ${VOTE_EMOJIS.no} / ${VOTE_EMOJIS.maybe}で投票してください。`
+    "下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。",
+    `${VOTE_EMOJIS.yes} ${VOTE_LABELS.yes}＝${VOTE_MEANINGS.yes} / ${VOTE_EMOJIS.no} ${VOTE_LABELS.no}＝${VOTE_MEANINGS.no} / ${VOTE_EMOJIS.maybe} ${VOTE_LABELS.maybe}＝${VOTE_MEANINGS.maybe}`,
+    "予定が変わったら、リアクションを押し直してよいぞ。"
   ].join("\n");
 }
 
@@ -48,7 +50,7 @@ export function buildOptionMessage(option: PollOption, poll: PollWithOptions): s
 }
 
 export function buildVotedMembersMessage(names: string[]): string {
-  return `投票済み：${names.length ? names.join(", ") : "まだ誰も投票していません。"}`;
+  return `投票済み：${names.length ? names.join(", ") : "まだ誰も投票しておらんようじゃ。"}`;
 }
 
 export async function buildResultMessage(poll: PollWithOptions, leadingMention?: string): Promise<string> {
@@ -62,27 +64,24 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
   const mentions = [leadingMention, poll.notifyTarget].filter((mention): mention is string => Boolean(mention)).join("\n");
   const winnerLines =
     winners.length > 0
-      ? winners.map((item) => `> ## ${item.option.label}\n${VOTE_LABELS.yes} ${item.count}票`)
-      : ["投票がありませんでした。"];
-
-  const resultLines = ranked.map((item, index) => `${index + 1}. ${item.option.label}　${VOTE_LABELS.yes} ${item.count}票`);
+      ? winners.map((item) => `> ## ${item.option.label}\n${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes} ${item.count}票`)
+      : ["まだ投票は入っておらんかったようじゃ。"];
 
   return [
     mentions,
     `# **日程調整結果: ${poll.title}**`,
-    "投票が締め切られました。",
+    "投票はここで締め切りじゃ。みんな、協力ありがとう。",
     "",
-    winners.length > 1 ? "## 実施候補（同票）" : "## 実施候補",
+    winners.length > 1 ? "## 実施候補（同票じゃ）" : "## 実施候補",
     ...winnerLines,
     "",
-    "## 全結果",
-    ...resultLines
+    "くわしい投票状況は、添付の画像にまとめておいたぞ。"
   ].filter((line, index) => index !== 0 || line.length > 0).join("\n");
 }
 
 export async function buildVoterList(poll: PollWithOptions): Promise<string> {
   if (poll.anonymous) {
-    return "このアンケートは匿名表示モードのため、投票者一覧は表示できません。";
+    return "このアンケートは匿名表示モードじゃから、投票者一覧は表示できんのじゃ。";
   }
 
   const votes = await getVotesForPoll(poll.id);
@@ -102,13 +101,13 @@ export async function buildVoterList(poll: PollWithOptions): Promise<string> {
 
     return [
       `${option.position}. ${option.label}`,
-      `${VOTE_LABELS.yes} ${groups.yes.length ? groups.yes.join(" ") : "なし"}`,
-      `${VOTE_LABELS.no} ${groups.no.length ? groups.no.join(" ") : "なし"}`,
-      `${VOTE_LABELS.maybe} ${groups.maybe.length ? groups.maybe.join(" ") : "なし"}`
+      `${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes}: ${groups.yes.length ? groups.yes.join(" ") : "なし"}`,
+      `${VOTE_LABELS.no} ${VOTE_MEANINGS.no}: ${groups.no.length ? groups.no.join(" ") : "なし"}`,
+      `${VOTE_LABELS.maybe} ${VOTE_MEANINGS.maybe}: ${groups.maybe.length ? groups.maybe.join(" ") : "なし"}`
     ].join("\n");
   });
 
-  return [`投票者一覧: ${poll.title}`, "", ...lines].join("\n\n");
+  return [`投票者一覧じゃ: ${poll.title}`, "", ...lines].join("\n\n");
 }
 
 export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
@@ -118,13 +117,14 @@ export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
     .join(", ");
   const lines = poll.options.map((option) => {
     const counts = breakdown.get(option.id) ?? { yes: 0, maybe: 0, no: 0 };
-    return `${option.position}. ${option.label} - ${VOTE_LABELS.yes} ${counts.yes} / ${VOTE_LABELS.no} ${counts.no} / ${VOTE_LABELS.maybe} ${counts.maybe}`;
+    return `${option.position}. ${option.label} - ${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes} ${counts.yes} / ${VOTE_LABELS.no} ${VOTE_MEANINGS.no} ${counts.no} / ${VOTE_LABELS.maybe} ${VOTE_MEANINGS.maybe} ${counts.maybe}`;
   });
   return [
-    `日程調整: ${poll.title}`,
+    `日程調整じゃ: ${poll.title}`,
     `締切: ${formatDeadline(poll.deadline)}`,
     `リマインド: ${reminders}`,
     `状態: ${poll.status}`,
+    `投票の意味: ${formatVoteDefinitions()}`,
     "",
     ...lines
   ].join("\n\n");

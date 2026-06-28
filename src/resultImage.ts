@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import sharp from "sharp";
 import type { PollWithOptions, Vote } from "./types.js";
-import { VOTE_LABELS } from "./voteEmojis.js";
+import { formatVoteDefinitions, VOTE_LABELS } from "./voteEmojis.js";
 
 export type MatrixParticipant = {
   userId: string;
@@ -108,7 +108,7 @@ export async function buildResultMatrixImage(
       weight: "bold"
     },
     {
-      text: `${VOTE_LABELS.yes}=参加可 / ${VOTE_LABELS.no}=不可 / ${VOTE_LABELS.maybe}=調整可`,
+      text: formatVoteDefinitions(),
       left: margin,
       top: margin + 40,
       fontSize: 14,
@@ -195,7 +195,7 @@ export async function buildResultMatrixImage(
           .join("")
       : (() => {
           textLayers.push({
-            text: "まだ誰も投票していません",
+            text: "まだ誰も投票しておらんようじゃ",
             left: tableX,
             top: tableY + headerHeight + 13,
             width: tableWidth,

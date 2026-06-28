@@ -47,7 +47,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleScheduleAdminCommand(interaction);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "不明なエラーが発生しました。";
+    const message = error instanceof Error ? error.message : "なにやら予期せぬエラーが起きたようじゃ。";
     try {
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
