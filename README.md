@@ -1,80 +1,66 @@
 # Discord Schedule Bot
 
 Discord 用の日程調整 BOT です。
-スラッシュコマンドで候補日を作成し、リアクションで投票できます。
-締切後は自動集計し、指定したユーザーまたはロールへメンションして結果を通知します。
+`/schedule` から Web 作成画面を開き、カレンダー UI で候補日を選んで Discord に投稿できます。
+投票は候補日ごとのリアクションで行い、締切後は結果メッセージと投票マトリクス画像を投稿します。
 
 ## 主な機能
 
-- `/schedule` でWeb作成画面を開く
-- 候補ごとの独立メッセージに `〇 / ✕ / △` リアクションで投票
-- リアクションの押し直しに対応
-- 投票数はDiscordのリアクション数で確認
-- 末尾に投票済みメンバー一覧をリアルタイム表示
-- 締切後に自動集計して通知
-- 締切時にDiscordリアクションを再取得して投票結果を補正
-- 結果通知に投票者と候補日ごとの参加可否マトリクス画像を添付
-- 締切後に追加されたリアクションは自動で取り消し
-- アンケートごとの締切前リマインド
-- 投票者一覧
-- 匿名表示モード
+- `/schedule` で Web 作成画面を発行
+- カレンダー UI で候補日を選択
+- 開始時間と終了時間を候補日に自動付与
+- `⭕ 参加 / ❌ 不参加 / 🔺 未定（行けたら行く）` で投票
+- 1候補につき1リアクションだけになるよう補正
+- 投票済みメンバー一覧をリアルタイム更新
+- 締切前リマインドを複数設定可能
+- 締切時に Discord リアクションを再取得して集計
+- 結果通知にロールメンションと投票マトリクス画像を添付
 - 手動締切、締切延長、キャンセル、削除
-- 削除時は関連するDiscordメッセージも削除
-- 候補日ごとの個別メッセージは通知を抑制
-- SQLiteまたはPostgres/Neonにアンケート情報を保存
+- 削除時に関連 Discord メッセージも削除
+- SQLite または Postgres/Neon にアンケート情報を保存
 
 ## セットアップ
 
-### 1. 依存関係をインストール
+### 1. 依存関係
 
 ```bash
 npm install
 ```
 
-### 2. 環境変数を作成
+### 2. 環境変数
 
 `.env.example` を参考に `.env` を作成します。
 
 ```env
 DISCORD_TOKEN=your_bot_token
 DISCORD_CLIENT_ID=your_application_client_id
-DISCORD_GUILD_ID=your_test_guild_id
-DATABASE_URL=
+DISCORD_GUILD_ID=your_server_id
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 DATABASE_PATH=./data/schedule-bot.sqlite
 BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
 DOCOSA_MENTION=
-DOCOSA_ROLE_ID=
+DOCOSA_ROLE_ID=your_docosa_role_id
 WEB_PORT=3000
 WEB_HOST=0.0.0.0
 WEB_BASE_URL=http://localhost:3000
 ```
 
-`DISCORD_GUILD_ID` を設定すると、そのサーバーだけにコマンドを登録します。
-検証中はこちらが反映も速くおすすめです。
-未設定の場合はグローバルコマンドとして登録します。
+主な設定:
 
-`DOCOSA_MENTION` は任意です。
-未設定の場合はサーバー内の `Docosa` ロールを探してメンションします。
-ユーザーや別ロールを確実にメンションしたい場合は、`<@ユーザーID>` または `<@&ロールID>` を設定してください。
-結果通知をロールに確実に飛ばす場合は、`DOCOSA_ROLE_ID=ロールID` を設定するのがおすすめです。
-ロールIDはDiscordで開発者モードをONにして、ロールを右クリックしてコピーします。
-BOTがそのロールにメンションするには、対象ロールの「このロールに対して誰でも@mentionを許可する」をONにするか、BOTに十分な権限を付けてください。
+- `DISCORD_TOKEN`: Discord Bot Token
+- `DISCORD_CLIENT_ID`: Discord Application Client ID
+- `DISCORD_GUILD_ID`: コマンド登録先サーバーID。設定すると反映が速いギルドコマンドになります
+- `DATABASE_URL`: Neon などの Postgres 接続文字列。本番運用では設定推奨です
+- `DATABASE_PATH`: `DATABASE_URL` 未設定時の SQLite 保存先
+- `DOCOSA_ROLE_ID`: 結果通知でメンションするロールID
+- `WEB_BASE_URL`: `/schedule` で返す WebUI のURL。Renderでは省略すると `RENDER_EXTERNAL_URL` を使います
 
-`DATABASE_URL` は任意です。
-NeonなどのPostgresを使う場合は接続文字列を設定してください。
-未設定の場合は `DATABASE_PATH` のSQLiteファイルを使います。
+`DOCOSA_ROLE_ID` を使う場合、対象ロールがメンション可能になっているか、BOTに十分な権限があることを確認してください。
 
-`WEB_BASE_URL` は `/schedule` で返す作成画面URLです。
-ローカル検証では `http://localhost:3000` で動きます。
-他の端末や外部メンバーにも使わせる場合は、トンネルやデプロイ先のURLに変更してください。
-Renderにデプロイする場合は、未設定ならRenderの自動環境変数 `RENDER_EXTERNAL_URL` を使います。
+### 3. Discord Bot 権限
 
-`WEB_HOST=0.0.0.0` にすると、同じLAN内の別デバイスからもWeb作成画面へアクセスできます。
-
-### 3. Discord Developer Portal の設定
-
-Bot に以下の権限を付けてサーバーへ招待してください。
+Bot に以下の権限を付けてサーバーへ招待します。
 
 - Send Messages
 - Embed Links
@@ -83,99 +69,35 @@ Bot に以下の権限を付けてサーバーへ招待してください。
 - Manage Messages
 - Use Slash Commands
 
-`Manage Messages` は、同じ候補日に `⭕ / ❌ / 🔺` が複数付いたとき、BOTが余分なリアクションを外すために必要です。
+`Manage Messages` は、同じ候補日に複数リアクションが付いたとき、BOTが余分なリアクションを外すために必要です。
 
-Privileged Gateway Intents は通常不要です。
-この BOT はリアクションイベントとスラッシュコマンドを使います。
-
-### 4. スラッシュコマンドを登録
+### 4. コマンド登録
 
 ```bash
 npm run commands:register
 ```
 
-### 5. BOT を起動
+コマンド定義を変更した場合も、再度このコマンドを実行してください。
+
+### 5. 起動
+
+開発時:
 
 ```bash
 npm run dev
 ```
 
-本番運用では以下を使います。
+本番相当:
 
 ```bash
 npm run build
 npm start
 ```
 
-## 他の人に使ってもらう
+## Render デプロイ
 
-同じDiscordサーバーの他メンバーに使ってもらう場合、BOT本体とWeb作成画面の両方が動いている必要があります。
-
-### 重要: `localhost` のままでは他の人は開けません
-
-`.env` の `WEB_BASE_URL` が以下のままだと、作成画面はBOTを動かしているPC本人からしか開けません。
-
-```env
-WEB_BASE_URL=http://localhost:3000
-```
-
-他の人にも `/schedule` の作成画面を開いてもらうには、`WEB_BASE_URL` を他の人のブラウザからアクセスできるURLに変更してください。
-
-例:
-
-```env
-WEB_BASE_URL=https://your-public-url.example
-```
-
-公開方法の選択肢:
-
-- 同じLAN内だけで使う: BOTを動かしているPCのLAN内IPを使う
-- インターネット越しに使う: トンネル、リバースプロキシ、VPS、PaaSなどで公開URLを用意する
-- 安定運用する: PCではなく常時起動できるサーバーで `npm start` を動かす
-
-### 公開前チェック
-
-1. `.env` の `WEB_BASE_URL` を公開URLにする
-2. `npm run commands:register` を実行する
-3. `npm run build` を実行する
-4. `npm start` でBOTを起動する
-5. Discordで `/schedule` を実行する
-6. 返ってきたURLを別の端末や別の人に開いてもらう
-7. 作成したアンケートがDiscordに投稿されることを確認する
-
-`DISCORD_GUILD_ID` を設定している場合、コマンドはそのサーバーだけに登録されます。
-複数サーバーで使う場合は、`DISCORD_GUILD_ID` を外してグローバルコマンドとして登録するか、サーバーごとに登録方針を調整してください。
-
-### LAN内で別デバイスから確認する
-
-同じWi-Fiや有線LAN内だけで確認する場合は、PCのLAN内IPを `WEB_BASE_URL` に設定します。
-
-例:
-
-```env
-WEB_PORT=3000
-WEB_HOST=0.0.0.0
-WEB_BASE_URL=http://100.64.1.25:3000
-```
-
-その後、BOTを再起動してDiscordで `/schedule` を実行します。
-返ってきたURLをスマホや別PCで開ければOKです。
-
-開けない場合は以下を確認してください。
-
-- BOTを起動しているPCと確認用デバイスが同じネットワークにいる
-- `npm run dev` または `npm start` が起動したままになっている
-- Windows Defender ファイアウォールが Node.js の通信をブロックしていない
-- URLのIPアドレスが現在のPCのIPアドレスと一致している
-
-## Renderで無料枠デプロイを試す
-
-Renderにデプロイする場合は、GitHubリポジトリからWeb Serviceとして起動します。
-このBOTは1つのNode.jsプロセスでDiscord BOTとWebUIの両方を動かします。
-
-### Renderの設定
-
-Renderで新しいWeb Serviceを作成し、GitHubリポジトリを選択します。
+Render では Web Service として起動します。
+このプロジェクトは 1つの Node.js プロセスで Discord BOT と WebUI の両方を動かします。
 
 推奨設定:
 
@@ -186,7 +108,7 @@ Start Command: npm start
 Instance Type: Free
 ```
 
-環境変数:
+Render 環境変数の例:
 
 ```env
 DISCORD_TOKEN=your_bot_token
@@ -194,25 +116,16 @@ DISCORD_CLIENT_ID=your_application_client_id
 DISCORD_GUILD_ID=your_server_id
 DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 BOT_TIMEZONE=Asia/Tokyo
-REMINDER_HOURS_BEFORE=24,3
-DOCOSA_MENTION=
 DOCOSA_ROLE_ID=your_docosa_role_id
 WEB_HOST=0.0.0.0
 ```
 
-`DATABASE_URL` にはNeonの接続文字列を設定します。
-`DATABASE_URL` を設定した場合、`DATABASE_PATH` は不要です。
+Renderでは `WEB_PORT` は省略して問題ありません。Renderが設定する `PORT` を使います。
+`WEB_BASE_URL` も通常は省略できます。独自ドメインを使う場合だけ明示してください。
 
-Renderでは `WEB_BASE_URL` は初回から省略できます。
-省略した場合、Renderが自動で用意する `RENDER_EXTERNAL_URL` を使って `/schedule` の作成画面URLを生成します。
-`WEB_PORT` も省略し、Renderが自動で設定する `PORT` を使います。
-独自ドメインなどに変えたい場合だけ、`WEB_BASE_URL=https://your-domain.example` を追加してください。
+### UptimeRobot
 
-### UptimeRobotでスリープ対策
-
-Renderの無料Web Serviceは無通信が続くとスリープするため、UptimeRobotなどでヘルスチェックURLを定期的に叩きます。
-
-監視URL:
+Render無料枠のスリープ対策として、UptimeRobot などで以下を監視します。
 
 ```text
 https://your-render-service.onrender.com/healthz
@@ -225,105 +138,25 @@ Monitor Type: HTTP(s)
 Interval: 5 minutes
 ```
 
-`/healthz` はWebプロセスが起きているかだけを確認する軽い監視用URLです。
-Discord接続完了まで含めて確認したい場合は `/readyz` を使えますが、Renderのスリープ復帰直後にDown判定されやすいため、UptimeRobotでは `/healthz` を推奨します。
-トップページではなく、必ず `/healthz` まで含めたURLを監視してください。
-
-### Render無料枠での注意点
-
-- 無料Web Serviceはスリープするため、起動直後の反応が遅くなることがある
-- `DATABASE_URL` を設定しない場合、ローカルSQLiteの永続性に不安がある
-- `DATABASE_URL` を設定しない場合、再デプロイや再起動で `./data/schedule-bot.sqlite` が失われる可能性がある
-- 長期運用でデータを確実に残すならNeonなどの外部Postgresを使う
-- BOTトークンや `.env` はGitHubにpushしない
-
-## Koyebで無料枠デプロイを試す
-
-Koyebにデプロイする場合は、GitHubリポジトリからWeb Serviceとして起動します。
-このBOTは1つのNode.jsプロセスでDiscord BOTとWebUIの両方を動かします。
-
-### 事前準備
-
-1. GitHubにリポジトリを作る
-2. このプロジェクトをpushする
-3. `.env` はpushしない
-4. Discord Developer Portalで、必要ならBOTトークンを再発行する
-5. ローカルで `npm run commands:register` を実行してDiscordコマンドを登録する
-
-### Koyebの設定
-
-Koyebで新しいAppまたはServiceを作成し、GitHubリポジトリを選択します。
-
-推奨設定:
-
-```text
-Service type: Web Service
-Builder: Buildpack
-Build command: npm run build
-Run command: npm start
-Instance: Free
-Port: 3000
-```
-
-環境変数:
-
-```env
-DISCORD_TOKEN=your_bot_token
-DISCORD_CLIENT_ID=your_application_client_id
-DISCORD_GUILD_ID=your_server_id
-DATABASE_PATH=./data/schedule-bot.sqlite
-BOT_TIMEZONE=Asia/Tokyo
-REMINDER_HOURS_BEFORE=24,3
-DOCOSA_MENTION=
-WEB_HOST=0.0.0.0
-WEB_PORT=3000
-WEB_BASE_URL=https://your-koyeb-url
-```
-
-最初のデプロイ時点ではKoyebのURLがまだ分からないため、仮の `WEB_BASE_URL` で一度デプロイします。
-デプロイ後、KoyebのService画面に表示される公開URLをコピーし、`WEB_BASE_URL` に設定して再デプロイしてください。
-
-### UptimeRobotでスリープ対策
-
-Koyeb Free Instanceは無通信が続くとscale downするため、UptimeRobotなどでヘルスチェックURLを定期的に叩きます。
-
-監視URL:
-
-```text
-https://your-koyeb-url/healthz
-```
-
-推奨:
-
-```text
-Monitor Type: HTTP(s)
-Interval: 5 minutes
-```
-
-### Koyeb無料枠での注意点
-
-- Free Instanceはリソースが小さいため、まずは小規模運用向け
-- 無料枠ではローカルSQLiteの永続性に不安がある
-- 再デプロイや再起動で `./data/schedule-bot.sqlite` が失われる可能性がある
-- 長期運用でデータを確実に残すなら外部DB化を検討する
-- BOTトークンや `.env` はGitHubにpushしない
+`/healthz` は Web プロセスの生存確認です。
+Discord 接続完了まで確認したい場合は `/readyz` も使えますが、スリープ復帰直後はDown判定されやすいため、監視URLは `/healthz` 推奨です。
 
 ## コマンド
 
-### アンケート作成
+### `/schedule`
 
-```text
-/schedule
-```
+Web 作成画面のURLを返します。
+リンクは30分間有効です。
 
-BOTが作成画面URLを返します。
-ブラウザで開くと、カレンダーUIで候補日を選択できます。
-開始時間と終了時間に入力した時間帯が、選択したすべての日付へ自動で付きます。
-開始時間の初期値は `13:00`、終了時間の初期値は `18:00` です。
-リマインドは `24時間前`、`12時間前`、`1時間前`、`30分前`、`15分前`、`10分前` から複数選択できます。
-初期状態では `24時間前` が1件設定されています。
+作成画面では以下を入力します。
 
-投稿イメージ:
+- タイトル
+- 締切日、締切時間
+- 開始時間、終了時間
+- リマインド時間
+- 候補日
+
+投稿例:
 
 ```text
 # 定例会 日程調整
@@ -334,55 +167,29 @@ ID: poll_xxx
 下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。
 ⭕ 参加 / ❌ 不参加 / 🔺 未定（行けたら行く）
 予定が変わったら、リアクションを押し直してよいぞ。
-
-> ## 2026-07-03(金) 20:00
-
-投票済み：まだ誰も投票しておらんようじゃ。
 ```
 
-例:
+候補日は個別メッセージとして投稿されます。
 
 ```text
-開始時間: 13:00
-終了時間: 18:00
-選択日: 2026-07-03, 2026-07-04
-リマインド: 24時間前, 30分前
+> ## 2026-07-03(金) 13:00-18:00
 ```
 
-作成される候補:
+### `/schedule-admin list`
 
-```text
-2026-07-03 13:00-18:00
-2026-07-04 13:00-18:00
-```
+受付中のアンケート一覧を表示します。
 
-リンクは30分間有効です。
+### `/schedule-admin show poll_id:poll_xxx`
 
-### 一覧
+アンケートの詳細を表示します。
 
-```text
-/schedule-admin list
-```
+### `/schedule-admin voters poll_id:poll_xxx`
 
-### 詳細
+投票者一覧を表示します。
 
-```text
-/schedule-admin show poll_id:poll_xxx
-```
+### `/schedule-admin close poll_id:poll_xxx`
 
-### 投票者一覧
-
-```text
-/schedule-admin voters poll_id:poll_xxx
-```
-
-匿名表示モードで作成したアンケートでは投票者一覧を表示しません。
-
-### 手動締切
-
-```text
-/schedule-admin close poll_id:poll_xxx
-```
+アンケートを手動で締め切り、結果を投稿します。
 
 結果メッセージ例:
 
@@ -392,50 +199,42 @@ ID: poll_xxx
 投票はここで締め切りじゃ。みんな、協力ありがとう。
 
 ## 実施候補
-> ## 2026-07-03(金) 20:00
+> ## 2026-07-03(金) 13:00-18:00
 〇 参加 5票
 
 くわしい投票状況は、添付の画像にまとめておいたぞ。
 ```
 
-### 締切延長
+結果には投票者と候補日ごとの参加可否マトリクス画像が添付されます。
 
-```text
-/schedule-admin extend poll_id:poll_xxx deadline:2026-07-02 23:59
-```
+### `/schedule-admin extend poll_id:poll_xxx deadline:2026-07-02 23:59`
 
-### キャンセル
+締切を延長します。
 
-```text
-/schedule-admin cancel poll_id:poll_xxx
-```
+### `/schedule-admin cancel poll_id:poll_xxx`
 
-### 削除
+アンケートをキャンセルします。
 
-```text
-/schedule-admin delete poll_id:poll_xxx
-```
+### `/schedule-admin delete poll_id:poll_xxx`
 
-アンケート本体、候補日メッセージ、投票済みメッセージをまとめて削除します。
-既に手動で消されているメッセージは無視します。
+アンケート情報と関連 Discord メッセージを削除します。
+すでに手動削除済みのメッセージは無視します。
 
-## 動作検証の流れ
+## 動作確認
 
-1. `.env` に検証用サーバーの `DISCORD_GUILD_ID` を入れる
-2. `npm run commands:register` を実行
-3. `npm run dev` で起動
-4. Discord で `/schedule` を実行
-5. BOT が投稿した候補ごとのメッセージに `⭕ / ❌ / 🔺` リアクションを押す
-6. Discordのリアクション数が増減することを確認
-7. `/schedule-admin voters` で投票者一覧を確認
-8. `/schedule-admin close` で手動集計を確認
-
-コマンドの説明や選択肢を変更した場合は、BOTを起動し直すだけでなく、もう一度 `npm run commands:register` を実行してください。
-既存のアンケートは古い表示のままなので、表示確認は新しく `/schedule` で作成してください。
-
-コマンド体系を変更した後は、必ず `npm run commands:register` を実行してください。
+1. `.env` を設定する
+2. `npm run commands:register` を実行する
+3. `npm run dev` または `npm start` で起動する
+4. Discordで `/schedule` を実行する
+5. WebUIからアンケートを投稿する
+6. 候補日に `⭕ / ❌ / 🔺` を付ける
+7. 投票済みメッセージが更新されることを確認する
+8. `/schedule-admin close` で結果と画像を確認する
 
 ## 注意点
 
-Renderなどの無料ホスティングではスリープや再起動が発生することがあります。
-リマインドは1分ごとの定期チェックで送信するため、無料枠のスリープ復帰直後は多少遅れる可能性があります。
+- Bot Token や `.env` は GitHub に push しないでください
+- Render無料枠ではスリープや再起動が発生します
+- 本番運用では `DATABASE_URL` に Neon などの外部 Postgres を設定してください
+- `DATABASE_URL` 未設定時は SQLite を使いますが、PaaS上では永続性に注意してください
+- 既存アンケートの表示文言は、作成時点のメッセージが残ります。表示確認は新しいアンケートで行ってください
