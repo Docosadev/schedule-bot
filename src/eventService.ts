@@ -231,12 +231,12 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
   const embed = new EmbedBuilder()
     .setColor(0xe33555)
     .addFields(
-      { name: "イベント名", value: state.title },
-      { name: "開催日時", value: candidate.label },
-      { name: "開催場所", value: buildLocationValue(state.location, venueUrl) },
-      { name: "今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
-      { name: "利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
-      { name: "元メッセージ", value: `[日程調整結果](${state.sourceMessageUrl})` }
+      { name: "📌 イベント名", value: state.title },
+      { name: "🗓️ 開催日時", value: candidate.label },
+      { name: "📍 開催場所", value: buildLocationValue(state.location, venueUrl) },
+      { name: "💰 今回の参加費", value: `${formatYen(state.fee)}円`, inline: true },
+      { name: "🧾 利用総額 / 現地参加", value: `${formatYen(state.price)}円 / ${state.attendees}人`, inline: true },
+      { name: "🔗 元メッセージ", value: `[日程調整結果](${state.sourceMessageUrl})` }
     )
     .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
 
