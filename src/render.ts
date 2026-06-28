@@ -3,7 +3,7 @@ import { formatDeadline } from "./dateUtils.js";
 import { getVoteBreakdown, getVoteCounts, getVotesForPoll } from "./db.js";
 import { formatReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import type { PollOption, PollWithOptions, VoteStatus } from "./types.js";
-import { formatVoteDefinitions, VOTE_EMOJIS, VOTE_LABELS, VOTE_MEANINGS } from "./voteEmojis.js";
+import { formatVoteDefinitions, VOTE_LABELS, VOTE_MEANINGS } from "./voteEmojis.js";
 
 export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilder> {
   const breakdown = await getVoteBreakdown(poll.id);
@@ -40,7 +40,7 @@ export function buildPollHeaderMessage(poll: PollWithOptions): string {
     "",
     "@everyone",
     "下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。",
-    `${VOTE_EMOJIS.yes} ${VOTE_LABELS.yes}＝${VOTE_MEANINGS.yes} / ${VOTE_EMOJIS.no} ${VOTE_LABELS.no}＝${VOTE_MEANINGS.no} / ${VOTE_EMOJIS.maybe} ${VOTE_LABELS.maybe}＝${VOTE_MEANINGS.maybe}`,
+    formatVoteDefinitions(true),
     "予定が変わったら、リアクションを押し直してよいぞ。"
   ].join("\n");
 }
