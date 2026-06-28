@@ -122,6 +122,7 @@ export async function publishSchedulePoll(
   input: SchedulePollInput
 ): Promise<{ pollId: string; messageUrl: string }> {
   const { poll, options } = buildPollFromInput(input);
+  const sentMessages: Message[] = [];
 
   createPoll(poll, options);
   const savedPoll = getPoll(poll.id);
@@ -129,30 +130,39 @@ export async function publishSchedulePoll(
     throw new Error("アンケートの保存に失敗しました。");
   }
 
-  const headerMessage = await channel.send({
-    content: buildPollHeaderMessage(savedPoll),
-    allowedMentions: { parse: ["everyone"] }
-  });
-  updatePollMessageId(poll.id, headerMessage.id);
+  try {
+    const headerMessage = await channel.send({
+      content: buildPollHeaderMessage(savedPoll),
+      allowedMentions: { parse: ["everyone"] }
+    });
+    sentMessages.push(headerMessage);
+    updatePollMessageId(poll.id, headerMessage.id);
 
-  for (const option of savedPoll.options) {
-    const optionMessage = await channel.send({
-      content: buildOptionMessage(option, savedPoll),
+    for (const option of savedPoll.options) {
+      const optionMessage = await channel.send({
+        content: buildOptionMessage(option, savedPoll),
+        flags: MessageFlags.SuppressNotifications
+      });
+      sentMessages.push(optionMessage);
+      updateOptionMessageId(option.id, optionMessage.id);
+      await optionMessage.react(VOTE_EMOJIS.yes);
+      await optionMessage.react(VOTE_EMOJIS.no);
+      await optionMessage.react(VOTE_EMOJIS.maybe);
+    }
+
+    const voterMessage = await channel.send({
+      content: buildVotedMembersMessage([]),
       flags: MessageFlags.SuppressNotifications
     });
-    updateOptionMessageId(option.id, optionMessage.id);
-    await optionMessage.react(VOTE_EMOJIS.yes);
-    await optionMessage.react(VOTE_EMOJIS.no);
-    await optionMessage.react(VOTE_EMOJIS.maybe);
+    sentMessages.push(voterMessage);
+    updateVoterMessageId(poll.id, voterMessage.id);
+
+    return { pollId: poll.id, messageUrl: headerMessage.url };
+  } catch (error) {
+    deletePoll(poll.id);
+    await Promise.allSettled(sentMessages.map((message) => message.delete()));
+    throw error;
   }
-
-  const voterMessage = await channel.send({
-    content: buildVotedMembersMessage([]),
-    flags: MessageFlags.SuppressNotifications
-  });
-  updateVoterMessageId(poll.id, voterMessage.id);
-
-  return { pollId: poll.id, messageUrl: headerMessage.url };
 }
 
 export async function createSchedulePoll(interaction: ChatInputCommandInteraction): Promise<void> {

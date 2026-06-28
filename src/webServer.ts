@@ -13,6 +13,8 @@ type CreatePollRequest = {
   deadlineTime?: string;
 };
 
+type PublishErrorResult = { ok: false; statusCode: number; message: string };
+
 export function startWebServer(client: Client): void {
   const server = createServer((request, response) => {
     void handleRequest(client, request, response).catch((error) => {
@@ -97,7 +99,16 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       notifyTarget: null,
       multipleChoice: true,
       anonymous: false
+    }).catch((error) => {
+      const formatted = formatPublishError(error);
+      console.error("schedule publish failed", { guildId: session.guildId, channelId: session.channelId }, error);
+      return formatted;
     });
+
+    if (isPublishErrorResult(result)) {
+      sendJson(response, result.statusCode, { ok: false, message: result.message });
+      return;
+    }
 
     consumeWebSession(token);
     sendJson(response, 200, { ok: true, messageUrl: result.messageUrl, pollId: result.pollId });
@@ -152,6 +163,33 @@ function sendJson(response: ServerResponse, statusCode: number, body: unknown): 
     "cache-control": "no-store"
   });
   response.end(JSON.stringify(body));
+}
+
+function isPublishErrorResult(result: unknown): result is PublishErrorResult {
+  return typeof result === "object" && result !== null && "ok" in result && result.ok === false;
+}
+
+function formatPublishError(error: unknown): PublishErrorResult {
+  const rawMessage = error instanceof Error ? error.message : "";
+  const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code?: unknown }).code) : "";
+
+  if (["50001", "50013"].includes(code) || /Missing (Access|Permissions)/i.test(rawMessage)) {
+    return {
+      ok: false,
+      statusCode: 500,
+      message: "Discordへの投稿に失敗しました。BOTに「メッセージ送信」「リアクション追加」「メッセージ履歴を読む」の権限があるか確認してください。"
+    };
+  }
+
+  if (["締切日時", "候補日", "最大10件", "締切は現在より後"].some((text) => rawMessage.includes(text))) {
+    return { ok: false, statusCode: 400, message: rawMessage };
+  }
+
+  return {
+    ok: false,
+    statusCode: 500,
+    message: rawMessage ? `Discordへの投稿に失敗しました: ${rawMessage}` : "Discordへの投稿に失敗しました。"
+  };
 }
 
 function renderIndexPage(): string {
