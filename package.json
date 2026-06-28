@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@discordjs/rest": "^2.4.3",
+    "@fontsource/noto-sans-jp": "^5.2.9",
     "better-sqlite3": "^11.8.1",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
