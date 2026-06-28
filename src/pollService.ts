@@ -22,7 +22,6 @@ import {
   getPoll,
   getPollByMessage,
   getVotedUserIds,
-  getVoteCounts,
   getVotesForPoll,
   replaceVotesForPoll,
   removeVoteForStatus,
@@ -49,7 +48,6 @@ export type SchedulePollInput = {
   candidateEndTime?: string;
   reminderMinutes?: number[];
   notifyTarget: string | null;
-  multipleChoice: boolean;
   anonymous: boolean;
 };
 
@@ -164,7 +162,7 @@ export async function publishSchedulePoll(
 
     for (const option of savedPoll.options) {
       const optionMessage = await channel.send({
-        content: buildOptionMessage(option, savedPoll),
+        content: buildOptionMessage(option),
         flags: MessageFlags.SuppressNotifications
       });
       sentMessages.push(optionMessage);
@@ -187,42 +185,6 @@ export async function publishSchedulePoll(
     await Promise.allSettled(sentMessages.map((message) => message.delete()));
     throw error;
   }
-}
-
-export async function createSchedulePoll(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!interaction.guildId || !interaction.channelId) {
-    await interaction.reply({ content: "サーバー内のテキストチャンネルで使うのじゃ。", ephemeral: true });
-    return;
-  }
-
-  const title = interaction.options.getString("title", true);
-  const datesInput = interaction.options.getString("dates", true);
-  const deadlineInput = interaction.options.getString("deadline", true);
-  const notifyRole = interaction.options.getRole("notify_role");
-  const notifyUser = interaction.options.getUser("notify_user");
-  const multipleChoice = interaction.options.getBoolean("multiple") ?? true;
-  const anonymous = interaction.options.getBoolean("anonymous") ?? false;
-  const notifyTarget = notifyRole ? `<@&${notifyRole.id}>` : notifyUser ? `<@${notifyUser.id}>` : null;
-
-  const input: SchedulePollInput = {
-    guildId: interaction.guildId,
-    channelId: interaction.channelId,
-    creatorId: interaction.user.id,
-    title,
-    datesInput,
-    deadlineInput,
-    notifyTarget,
-    multipleChoice,
-    anonymous
-  };
-
-  await interaction.reply({ content: "日程調整アンケートを作っておるぞ。少し待つのじゃ。", ephemeral: true });
-  if (!isGuildTextChannel(interaction.channel)) {
-    throw new Error("アンケートを投稿できるテキストチャンネルで使うのじゃ。");
-  }
-
-  const result = await publishSchedulePoll(interaction.channel, input);
-  await interaction.editReply(`作成できたぞ: ${result.messageUrl}`);
 }
 
 async function refreshVotedMembersMessage(channel: GuildTextBasedChannel, pollId: string): Promise<void> {
@@ -601,9 +563,4 @@ export function canManagePoll(interaction: ChatInputCommandInteraction, poll: Po
   }
   const permissions = interaction.memberPermissions;
   return Boolean(permissions?.has("ManageGuild") || permissions?.has("Administrator"));
-}
-
-export async function summarizeCounts(poll: PollWithOptions): Promise<string> {
-  const counts = await getVoteCounts(poll.id);
-  return poll.options.map((option) => `${option.emoji} ${option.label}: ${counts.get(option.id) ?? 0}票`).join("\n");
 }

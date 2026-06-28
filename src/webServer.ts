@@ -108,7 +108,6 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       candidateEndTime,
       reminderMinutes,
       notifyTarget: null,
-      multipleChoice: true,
       anonymous: false
     }).catch((error) => {
       const formatted = formatPublishError(error);

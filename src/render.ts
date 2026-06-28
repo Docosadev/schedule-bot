@@ -45,7 +45,7 @@ export function buildPollHeaderMessage(poll: PollWithOptions): string {
   ].join("\n");
 }
 
-export function buildOptionMessage(option: PollOption, poll: PollWithOptions): string {
+export function buildOptionMessage(option: PollOption): string {
   return `> ## ${option.label}`;
 }
 

@@ -591,14 +591,6 @@ export async function extendPoll(pollId: string, deadlineIso: string): Promise<v
   getSqlite().prepare("UPDATE polls SET deadline = ?, status = 'open', closed_at = NULL WHERE id = ?").run(deadlineIso, pollId);
 }
 
-export async function setRemindedHours(pollId: string, hours: number[]): Promise<void> {
-  if (usePostgres()) {
-    await getPostgresPool().query("UPDATE polls SET reminded_hours = $1 WHERE id = $2", [JSON.stringify(hours), pollId]);
-    return;
-  }
-  getSqlite().prepare("UPDATE polls SET reminded_hours = ? WHERE id = ?").run(JSON.stringify(hours), pollId);
-}
-
 export async function setRemindedMinutes(pollId: string, minutes: number[]): Promise<void> {
   if (usePostgres()) {
     await getPostgresPool().query("UPDATE polls SET reminded_minutes = $1 WHERE id = $2", [JSON.stringify(minutes), pollId]);

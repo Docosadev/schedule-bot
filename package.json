@@ -15,12 +15,10 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@discordjs/rest": "^2.4.3",
     "@expo-google-fonts/noto-sans-jp": "^0.4.3",
     "better-sqlite3": "^11.8.1",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
-    "discord-api-types": "^0.37.115",
     "discord.js": "^14.17.3",
     "dotenv": "^16.4.7",
     "pg": "^8.22.0",
