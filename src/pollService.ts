@@ -22,6 +22,7 @@ import {
   getPollByMessage,
   getVotedUserIds,
   getVoteCounts,
+  getVotesForPoll,
   replaceVotesForPoll,
   removeVoteForStatus,
   setRemindedMinutes,
@@ -289,12 +290,16 @@ export async function handleReactionRemove(reaction: MessageReaction | PartialMe
 }
 
 async function removeOtherStatusReactions(message: Message, selected: VoteStatus, userId: string): Promise<void> {
+  const fullMessage = await message.fetch().catch(() => message);
+
   for (const [status, emoji] of Object.entries(VOTE_EMOJIS) as [VoteStatus, string][]) {
     if (status === selected) {
       continue;
     }
-    const reaction = message.reactions.cache.find((item) => item.emoji.name === emoji);
-    await reaction?.users.remove(userId).catch(() => undefined);
+    const reaction = fullMessage.reactions.cache.find((item) => item.emoji.name === emoji);
+    await reaction?.users.remove(userId).catch((error) => {
+      console.warn("failed to remove extra reaction", { messageId: fullMessage.id, userId, emoji }, error);
+    });
   }
 }
 
@@ -303,6 +308,7 @@ const REACTION_SYNC_ORDER: [VoteStatus, string][] = [
   ["maybe", VOTE_EMOJIS.maybe],
   ["no", VOTE_EMOJIS.no]
 ];
+const AMBIGUOUS_REACTION_PRIORITY: VoteStatus[] = ["maybe", "no", "yes"];
 
 async function fetchReactionUserIds(reaction: MessageReaction): Promise<string[]> {
   const userIds: string[] = [];
@@ -330,6 +336,8 @@ async function fetchReactionUserIds(reaction: MessageReaction): Promise<string[]
 }
 
 async function syncVotesFromDiscord(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<PollWithOptions> {
+  const existingVotes = await getVotesForPoll(poll.id);
+  const existingByOptionAndUser = new Map(existingVotes.map((vote) => [`${vote.optionId}:${vote.userId}`, vote.status]));
   const votesByUserAndOption = new Map<string, VoteSnapshot>();
 
   for (const option of poll.options) {
@@ -342,6 +350,8 @@ async function syncVotesFromDiscord(channel: GuildTextBasedChannel, poll: PollWi
       continue;
     }
 
+    const statusesByUser = new Map<string, Set<VoteStatus>>();
+
     for (const [status, emoji] of REACTION_SYNC_ORDER) {
       const reaction = message.reactions.cache.find((item) => item.emoji.name === emoji);
       if (!reaction) {
@@ -350,10 +360,32 @@ async function syncVotesFromDiscord(channel: GuildTextBasedChannel, poll: PollWi
 
       const userIds = await fetchReactionUserIds(reaction);
       for (const userId of userIds) {
-        const key = `${option.id}:${userId}`;
-        if (!votesByUserAndOption.has(key)) {
-          votesByUserAndOption.set(key, { optionId: option.id, userId, status });
+        const statuses = statusesByUser.get(userId) ?? new Set<VoteStatus>();
+        statuses.add(status);
+        statusesByUser.set(userId, statuses);
+      }
+    }
+
+    for (const [userId, statuses] of statusesByUser) {
+      const key = `${option.id}:${userId}`;
+      const existingStatus = existingByOptionAndUser.get(key);
+      const selectedStatus =
+        existingStatus && statuses.has(existingStatus)
+          ? existingStatus
+          : statuses.size === 1
+            ? [...statuses][0]
+            : (AMBIGUOUS_REACTION_PRIORITY.find((status) => statuses.has(status)) ?? "maybe");
+
+      votesByUserAndOption.set(key, { optionId: option.id, userId, status: selectedStatus });
+
+      for (const [status, emoji] of REACTION_SYNC_ORDER) {
+        if (status === selectedStatus) {
+          continue;
         }
+        const reaction = message.reactions.cache.find((item) => item.emoji.name === emoji);
+        await reaction?.users.remove(userId).catch((error) => {
+          console.warn("failed to clean up ambiguous reaction", { messageId: message.id, userId, emoji }, error);
+        });
       }
     }
   }

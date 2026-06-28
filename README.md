@@ -75,7 +75,10 @@ Bot に以下の権限を付けてサーバーへ招待してください。
 - Embed Links
 - Add Reactions
 - Read Message History
+- Manage Messages
 - Use Slash Commands
+
+`Manage Messages` は、同じ候補日に `⭕ / ❌ / 🔺` が複数付いたとき、BOTが余分なリアクションを外すために必要です。
 
 Privileged Gateway Intents は通常不要です。
 この BOT はリアクションイベントとスラッシュコマンドを使います。

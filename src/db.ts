@@ -406,28 +406,25 @@ export async function getPollByMessage(messageId: string): Promise<{ poll: PollW
 export async function addVote(poll: Poll, option: PollOption, userId: string, status: VoteStatus = "yes"): Promise<void> {
   const now = new Date().toISOString();
   if (usePostgres()) {
-    await getPostgresPool().query(
-      `
-        INSERT INTO votes (poll_id, option_id, user_id, status, created_at)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT(poll_id, option_id, user_id)
-        DO UPDATE SET status = excluded.status, created_at = excluded.created_at
-      `,
-      [poll.id, option.id, userId, status, now]
-    );
+    await withPostgresTransaction(async (client) => {
+      await client.query("DELETE FROM votes WHERE poll_id = $1 AND option_id = $2 AND user_id = $3", [poll.id, option.id, userId]);
+      await client.query("INSERT INTO votes (poll_id, option_id, user_id, status, created_at) VALUES ($1, $2, $3, $4, $5)", [
+        poll.id,
+        option.id,
+        userId,
+        status,
+        now
+      ]);
+    });
     return;
   }
 
-  getSqlite()
-    .prepare(
-      `
-        INSERT INTO votes (poll_id, option_id, user_id, status, created_at)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(poll_id, option_id, user_id)
-        DO UPDATE SET status = excluded.status, created_at = excluded.created_at
-      `
-    )
-    .run(poll.id, option.id, userId, status, now);
+  getSqlite().transaction(() => {
+    getSqlite().prepare("DELETE FROM votes WHERE poll_id = ? AND option_id = ? AND user_id = ?").run(poll.id, option.id, userId);
+    getSqlite()
+      .prepare("INSERT INTO votes (poll_id, option_id, user_id, status, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(poll.id, option.id, userId, status, now);
+  })();
 }
 
 export async function removeVoteForStatus(
