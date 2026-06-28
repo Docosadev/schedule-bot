@@ -438,20 +438,22 @@ export async function checkReminders(clientChannelsFetch: (channelId: string) =>
 }
 
 export async function closePollByCommand(interaction: ChatInputCommandInteraction, cancelled = false): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   const pollId = interaction.options.getString("poll_id", true);
   const poll = await getPoll(pollId);
   if (!poll) {
-    await interaction.reply({ content: "指定されたアンケートが見つかりません。", ephemeral: true });
+    await interaction.editReply("指定されたアンケートが見つかりません。");
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.reply({ content: "このアンケートを操作する権限がありません。", ephemeral: true });
+    await interaction.editReply("このアンケートを操作する権限がありません。");
     return;
   }
 
   if (cancelled) {
     await closePoll(poll.id, "cancelled");
-    await interaction.reply("アンケートをキャンセルしました。");
+    await interaction.editReply("アンケートをキャンセルしました。");
     return;
   }
 
@@ -459,10 +461,11 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   await closePoll(syncedPoll.id, "closed");
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(interaction.guild);
-  await interaction.reply({
+  await interaction.followUp({
     content: await buildResultMessage(closedPoll, docosaMention),
     allowedMentions: { parse: ["users", "roles"] }
   });
+  await interaction.editReply("アンケートを締め切り、結果を投稿しました。");
 }
 
 export async function extendPollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {

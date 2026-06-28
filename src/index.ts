@@ -2,6 +2,7 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  MessageFlags,
   Partials
 } from "discord.js";
 import { handleScheduleAdminCommand, handleScheduleCommand } from "./commands.js";
@@ -47,10 +48,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "不明なエラーが発生しました。";
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: message, ephemeral: true });
-    } else {
-      await interaction.reply({ content: message, ephemeral: true });
+    try {
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: message, flags: MessageFlags.Ephemeral });
+      } else {
+        await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
+      }
+    } catch (replyError) {
+      console.error("interaction error response failed", replyError);
     }
   }
 });
