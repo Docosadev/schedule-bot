@@ -43,6 +43,7 @@ DATABASE_PATH=./data/schedule-bot.sqlite
 BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
 DOCOSA_MENTION=
+DOCOSA_ROLE_ID=
 WEB_PORT=3000
 WEB_HOST=0.0.0.0
 WEB_BASE_URL=http://localhost:3000
@@ -55,6 +56,9 @@ WEB_BASE_URL=http://localhost:3000
 `DOCOSA_MENTION` は任意です。
 未設定の場合はサーバー内の `Docosa` ロールを探してメンションします。
 ユーザーや別ロールを確実にメンションしたい場合は、`<@ユーザーID>` または `<@&ロールID>` を設定してください。
+結果通知をロールに確実に飛ばす場合は、`DOCOSA_ROLE_ID=ロールID` を設定するのがおすすめです。
+ロールIDはDiscordで開発者モードをONにして、ロールを右クリックしてコピーします。
+BOTがそのロールにメンションするには、対象ロールの「このロールに対して誰でも@mentionを許可する」をONにするか、BOTに十分な権限を付けてください。
 
 `DATABASE_URL` は任意です。
 NeonなどのPostgresを使う場合は接続文字列を設定してください。
@@ -191,6 +195,7 @@ DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
 DOCOSA_MENTION=
+DOCOSA_ROLE_ID=your_docosa_role_id
 WEB_HOST=0.0.0.0
 ```
 

@@ -60,17 +60,31 @@ export function isGuildTextChannel(channel: unknown): channel is GuildTextBasedC
 }
 
 async function resolveDocosaMention(guild: Guild | null): Promise<string> {
+  if (config.docosaRoleId) {
+    return `<@&${config.docosaRoleId}>`;
+  }
+
   if (config.docosaMention) {
-    return config.docosaMention;
+    const trimmed = config.docosaMention.trim();
+    if (/^\d{17,20}$/.test(trimmed)) {
+      return `<@&${trimmed}>`;
+    }
+    return trimmed;
   }
 
   if (!guild) {
-    return "@Docosa";
+    console.warn("Docosa mention fallback used because guild is unavailable.");
+    return "";
   }
 
   const roles = await guild.roles.fetch().catch(() => null);
-  const role = roles?.find((item) => item.name === "Docosa");
-  return role ? `<@&${role.id}>` : "@Docosa";
+  const role = roles?.find((item) => item.name.trim().toLowerCase() === "docosa");
+  if (!role) {
+    console.warn("Docosa role was not found. Set DOCOSA_ROLE_ID to enable result mentions.");
+    return "";
+  }
+
+  return `<@&${role.id}>`;
 }
 
 export function buildPollFromInput(params: SchedulePollInput): { poll: Poll; options: PollOption[] } {

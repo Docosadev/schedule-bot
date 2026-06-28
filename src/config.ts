@@ -9,6 +9,7 @@ export type Config = {
   timezone: string;
   reminderHoursBefore: number[];
   docosaMention?: string;
+  docosaRoleId?: string;
   webPort: number;
   webHost: string;
   webBaseUrl: string;
@@ -43,6 +44,7 @@ export const config: Config = {
   timezone: process.env.BOT_TIMEZONE ?? "Asia/Tokyo",
   reminderHoursBefore: parseReminderHours(process.env.REMINDER_HOURS_BEFORE),
   docosaMention: process.env.DOCOSA_MENTION,
+  docosaRoleId: process.env.DOCOSA_ROLE_ID,
   webPort: Number(process.env.WEB_PORT ?? process.env.PORT ?? "3000"),
   webHost: process.env.WEB_HOST ?? "0.0.0.0",
   webBaseUrl:
