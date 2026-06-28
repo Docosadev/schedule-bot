@@ -242,7 +242,7 @@ function renderCreatePage(token: string): string {
 
             <label>
               タイトル
-              <input id="title" name="title" type="text" maxlength="100" placeholder="定例会の日程調整" required>
+              <input id="title" name="title" type="text" maxlength="100" placeholder="定例会" required>
             </label>
 
             <div class="two-col">

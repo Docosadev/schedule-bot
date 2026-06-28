@@ -20,7 +20,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
   });
 
   return new EmbedBuilder()
-    .setTitle(`日程調整: ${poll.title}`)
+    .setTitle(`${poll.title} 日程調整`)
     .setColor(poll.status === "open" ? 0x2f80ed : 0x828282)
     .setDescription("候補ごとのメッセージにリアクションするのじゃ。予定が変わったら押し直してよいぞ。")
     .addFields(
@@ -34,7 +34,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
 
 export function buildPollHeaderMessage(poll: PollWithOptions): string {
   return [
-    `# **日程調整: ${poll.title}**`,
+    `# **${poll.title} 日程調整**`,
     `締切: ${formatDeadline(poll.deadline)}`,
     `ID: ${poll.id}`,
     "",
@@ -69,7 +69,7 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
 
   return [
     mentions,
-    `# **日程調整結果: ${poll.title}**`,
+    `# **${poll.title} 日程調整結果**`,
     "投票はここで締め切りじゃ。みんな、協力ありがとう。",
     "",
     winners.length > 1 ? "## 実施候補（同票じゃ）" : "## 実施候補",

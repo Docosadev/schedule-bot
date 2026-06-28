@@ -101,7 +101,7 @@ export async function buildResultMatrixImage(
   const voteMap = new Map(votes.map((vote) => [`${vote.optionId}:${vote.userId}`, vote.status]));
   const textLayers: TextLayer[] = [
     {
-      text: truncate(`日程調整結果: ${poll.title}`, 32),
+      text: truncate(`${poll.title} 日程調整結果`, 32),
       left: margin,
       top: margin + 2,
       fontSize: 28,
