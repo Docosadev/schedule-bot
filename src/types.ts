@@ -13,6 +13,8 @@ export type Poll = {
   notifyTarget: string | null;
   multipleChoice: boolean;
   anonymous: boolean;
+  reminderMinutes: string;
+  remindedMinutes: string;
   status: PollStatus;
   remindedHours: string;
   createdAt: string;

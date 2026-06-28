@@ -2,6 +2,7 @@ import type { Client } from "discord.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { isGuildTextChannel, publishSchedulePoll } from "./pollService.js";
+import { REMINDER_CHOICES, normalizeReminderMinutes } from "./reminders.js";
 import { consumeWebSession, getWebSession } from "./webSessions.js";
 
 type CreatePollRequest = {
@@ -11,6 +12,7 @@ type CreatePollRequest = {
   candidateEndTime?: string;
   deadlineDate?: string;
   deadlineTime?: string;
+  reminderMinutes?: number[];
 };
 
 type PublishErrorResult = { ok: false; statusCode: number; message: string };
@@ -58,6 +60,10 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
     const candidateEndTime = (body.candidateEndTime ?? "").trim();
     const deadlineDate = (body.deadlineDate ?? "").trim();
     const deadlineTime = (body.deadlineTime ?? "").trim();
+    const reminderMinutes = normalizeReminderMinutes(
+      body.reminderMinutes,
+      new Set(REMINDER_CHOICES.map((choice) => choice.minutes))
+    );
 
     if (!title) {
       sendJson(response, 400, { ok: false, message: "タイトルを入力してください。" });
@@ -79,6 +85,10 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       sendJson(response, 400, { ok: false, message: "終了時間は開始時間より後にしてください。" });
       return;
     }
+    if (reminderMinutes.length === 0) {
+      sendJson(response, 400, { ok: false, message: "リマインド時間を1つ以上選択してください。" });
+      return;
+    }
 
     const channel = await client.channels.fetch(session.channelId).catch(() => null);
     if (!isGuildTextChannel(channel) || channel.guild.id !== session.guildId) {
@@ -96,6 +106,7 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       datesInput,
       deadlineInput,
       candidateEndTime,
+      reminderMinutes,
       notifyTarget: null,
       multipleChoice: true,
       anonymous: false
@@ -205,6 +216,8 @@ function renderNotFoundPage(): string {
 }
 
 function renderCreatePage(token: string): string {
+  const reminderChoicesJson = JSON.stringify(REMINDER_CHOICES);
+
   return renderShell(
     "日程調整を作成",
     `
@@ -240,6 +253,12 @@ function renderCreatePage(token: string): string {
               </label>
             </div>
 
+            <section class="reminder-section">
+              <h2>リマインド設定</h2>
+              <div id="reminderList" class="reminder-list"></div>
+              <button type="button" id="addReminderButton" class="secondary-button">＋追加</button>
+            </section>
+
             <div class="actions">
               <button type="submit" id="submitButton">Discordに投稿</button>
               <span id="status" role="status"></span>
@@ -268,6 +287,7 @@ function renderCreatePage(token: string): string {
 
       <script>
         const token = ${JSON.stringify(token)};
+        const reminderChoices = ${reminderChoicesJson};
         const selectedDates = new Set();
         const cursor = new Date();
         cursor.setDate(1);
@@ -283,6 +303,8 @@ function renderCreatePage(token: string): string {
         const selectedCount = document.getElementById("selectedCount");
         const status = document.getElementById("status");
         const submitButton = document.getElementById("submitButton");
+        const reminderList = document.getElementById("reminderList");
+        const addReminderButton = document.getElementById("addReminderButton");
 
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -298,6 +320,7 @@ function renderCreatePage(token: string): string {
         });
         candidateStartTimeInput.addEventListener("input", renderPreview);
         candidateEndTimeInput.addEventListener("input", renderPreview);
+        addReminderButton.addEventListener("click", () => addReminderRow(nextReminderValue()));
 
         document.getElementById("scheduleForm").addEventListener("submit", async (event) => {
           event.preventDefault();
@@ -316,6 +339,11 @@ function renderCreatePage(token: string): string {
             status.textContent = "締切は現在より後の日時にしてください。";
             return;
           }
+          const reminderMinutes = getReminderMinutes();
+          if (reminderMinutes.length === 0) {
+            status.textContent = "リマインド時間を1つ以上選択してください。";
+            return;
+          }
 
           submitButton.disabled = true;
           status.textContent = "投稿しています...";
@@ -330,7 +358,8 @@ function renderCreatePage(token: string): string {
                 candidateStartTime: candidateStartTimeInput.value,
                 candidateEndTime: candidateEndTimeInput.value,
                 deadlineDate: deadlineDateInput.value,
-                deadlineTime: deadlineTimeInput.value
+                deadlineTime: deadlineTimeInput.value,
+                reminderMinutes
               })
             });
             const result = await response.json();
@@ -404,10 +433,67 @@ function renderCreatePage(token: string): string {
           return new Date(deadlineDate + "T" + deadlineTime).getTime() <= Date.now();
         }
 
+        function addReminderRow(value) {
+          const row = document.createElement("div");
+          row.className = "reminder-row";
+
+          const label = document.createElement("label");
+          label.textContent = "リマインド時間";
+
+          const select = document.createElement("select");
+          select.className = "reminderSelect";
+          for (const choice of reminderChoices) {
+            const option = document.createElement("option");
+            option.value = String(choice.minutes);
+            option.textContent = choice.label;
+            select.appendChild(option);
+          }
+          select.value = String(value || reminderChoices[0].minutes);
+          select.addEventListener("change", syncReminderRows);
+
+          const removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.className = "remove-reminder-button";
+          removeButton.setAttribute("aria-label", "リマインド時間を削除");
+          removeButton.textContent = "×";
+          removeButton.addEventListener("click", () => {
+            row.remove();
+            syncReminderRows();
+          });
+
+          label.appendChild(select);
+          row.appendChild(label);
+          row.appendChild(removeButton);
+          reminderList.appendChild(row);
+          syncReminderRows();
+        }
+
+        function syncReminderRows() {
+          const rows = [...reminderList.querySelectorAll(".reminder-row")];
+          for (const row of rows) {
+            const removeButton = row.querySelector(".remove-reminder-button");
+            removeButton.hidden = rows.length <= 1;
+          }
+          addReminderButton.disabled = getReminderMinutes().length >= reminderChoices.length;
+        }
+
+        function getReminderMinutes() {
+          const values = [...reminderList.querySelectorAll(".reminderSelect")]
+            .map((select) => Number(select.value))
+            .filter((value) => Number.isFinite(value) && value > 0);
+          return [...new Set(values)].sort((a, b) => b - a);
+        }
+
+        function nextReminderValue() {
+          const selected = new Set(getReminderMinutes());
+          return reminderChoices.find((choice) => !selected.has(choice.minutes))?.minutes || reminderChoices[0].minutes;
+        }
+
         function escapeHtml(value) {
           return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
         }
 
+        addReminderRow();
         renderCalendar();
         renderPreview();
       </script>
@@ -461,7 +547,8 @@ function renderShell(title: string, body: string): string {
     }
     .form-panel { display: grid; gap: 16px; }
     label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
-    input {
+    input,
+    select {
       width: 100%;
       height: 40px;
       border: 1px solid var(--line);
@@ -471,11 +558,25 @@ function renderShell(title: string, body: string): string {
       background: #fff;
       font: inherit;
     }
-    input:focus {
+    input:focus,
+    select:focus {
       outline: 2px solid var(--accent-soft);
       border-color: var(--accent);
     }
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .reminder-section {
+      display: grid;
+      gap: 10px;
+      padding-top: 2px;
+    }
+    .reminder-section h2 { font-size: 15px; }
+    .reminder-list { display: grid; gap: 8px; }
+    .reminder-row {
+      display: grid;
+      grid-template-columns: 1fr 40px;
+      gap: 8px;
+      align-items: end;
+    }
     .actions { display: flex; align-items: center; gap: 12px; min-height: 40px; }
     button {
       border: 0;
@@ -488,6 +589,21 @@ function renderShell(title: string, body: string): string {
     }
     button:disabled { cursor: default; opacity: 0.65; }
     button[type="submit"] { height: 40px; padding: 0 16px; }
+    .secondary-button {
+      justify-self: start;
+      height: 36px;
+      padding: 0 12px;
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .remove-reminder-button {
+      width: 40px;
+      height: 40px;
+      color: var(--muted);
+      background: #eef2f7;
+      font-size: 20px;
+      line-height: 1;
+    }
     #status { color: var(--muted); font-size: 14px; }
     #status a { color: var(--accent); font-weight: 700; }
     .calendar-head {

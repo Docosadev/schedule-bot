@@ -27,7 +27,7 @@ client.once(Events.ClientReady, (readyClient) => {
 
   setInterval(() => {
     void checkDuePolls((channelId) => client.channels.fetch(channelId));
-    void checkReminders((channelId) => client.channels.fetch(channelId), config.reminderHoursBefore);
+    void checkReminders((channelId) => client.channels.fetch(channelId));
   }, 60_000);
 });
 

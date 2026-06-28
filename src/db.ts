@@ -24,6 +24,8 @@ export function migrate(): void {
       notify_target TEXT,
       multiple_choice INTEGER NOT NULL DEFAULT 1,
       anonymous INTEGER NOT NULL DEFAULT 0,
+      reminder_minutes TEXT NOT NULL DEFAULT '[1440]',
+      reminded_minutes TEXT NOT NULL DEFAULT '[]',
       status TEXT NOT NULL DEFAULT 'open',
       reminded_hours TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
@@ -58,6 +60,8 @@ export function migrate(): void {
   ensureColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
   ensureColumn("poll_options", "message_id", "TEXT");
   ensureColumn("polls", "voter_message_id", "TEXT");
+  ensureColumn("polls", "reminder_minutes", "TEXT NOT NULL DEFAULT '[1440]'");
+  ensureColumn("polls", "reminded_minutes", "TEXT NOT NULL DEFAULT '[]'");
 }
 
 function ensureColumn(table: string, column: string, definition: string): void {
@@ -80,6 +84,8 @@ function mapPoll(row: Record<string, unknown>): Poll {
     notifyTarget: row.notify_target ? String(row.notify_target) : null,
     multipleChoice: Boolean(row.multiple_choice),
     anonymous: Boolean(row.anonymous),
+    reminderMinutes: row.reminder_minutes ? String(row.reminder_minutes) : "[1440]",
+    remindedMinutes: row.reminded_minutes ? String(row.reminded_minutes) : "[]",
     status: String(row.status) as PollStatus,
     remindedHours: String(row.reminded_hours),
     createdAt: String(row.created_at),
@@ -103,12 +109,12 @@ export function createPoll(poll: Poll, options: PollOption[]): void {
   const insertPoll = db.prepare(`
     INSERT INTO polls (
       id, guild_id, channel_id, message_id, voter_message_id, creator_id, title, deadline,
-      notify_target, multiple_choice, anonymous, status, reminded_hours,
+      notify_target, multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
       created_at, closed_at
     )
     VALUES (
       @id, @guildId, @channelId, @messageId, @voterMessageId, @creatorId, @title, @deadline,
-      @notifyTarget, @multipleChoice, @anonymous, @status, @remindedHours,
+      @notifyTarget, @multipleChoice, @anonymous, @reminderMinutes, @remindedMinutes, @status, @remindedHours,
       @createdAt, @closedAt
     )
   `);
@@ -288,6 +294,10 @@ export function extendPoll(pollId: string, deadlineIso: string): void {
 
 export function setRemindedHours(pollId: string, hours: number[]): void {
   db.prepare("UPDATE polls SET reminded_hours = ? WHERE id = ?").run(JSON.stringify(hours), pollId);
+}
+
+export function setRemindedMinutes(pollId: string, minutes: number[]): void {
+  db.prepare("UPDATE polls SET reminded_minutes = ? WHERE id = ?").run(JSON.stringify(minutes), pollId);
 }
 
 export function deletePoll(pollId: string): void {

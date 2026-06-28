@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import { formatDeadline } from "./dateUtils.js";
 import { getVoteBreakdown, getVoteCounts, getVotesForPoll } from "./db.js";
+import { formatReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import type { PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { VOTE_EMOJIS, VOTE_LABELS } from "./voteEmojis.js";
 
@@ -112,9 +113,19 @@ export function buildVoterList(poll: PollWithOptions): string {
 
 export function buildPollSummary(poll: PollWithOptions): string {
   const breakdown = getVoteBreakdown(poll.id);
+  const reminders = parseReminderMinutesJson(poll.reminderMinutes)
+    .map(formatReminderMinutes)
+    .join(", ");
   const lines = poll.options.map((option) => {
     const counts = breakdown.get(option.id) ?? { yes: 0, maybe: 0, no: 0 };
     return `${option.position}. ${option.label} - ${VOTE_LABELS.yes} ${counts.yes} / ${VOTE_LABELS.no} ${counts.no} / ${VOTE_LABELS.maybe} ${counts.maybe}`;
   });
-  return [`日程調整: ${poll.title}`, `締切: ${formatDeadline(poll.deadline)}`, `状態: ${poll.status}`, "", ...lines].join("\n\n");
+  return [
+    `日程調整: ${poll.title}`,
+    `締切: ${formatDeadline(poll.deadline)}`,
+    `リマインド: ${reminders}`,
+    `状態: ${poll.status}`,
+    "",
+    ...lines
+  ].join("\n\n");
 }

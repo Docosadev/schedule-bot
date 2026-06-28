@@ -23,12 +23,13 @@ import {
   getVotedUserIds,
   getVoteCounts,
   removeVoteForStatus,
-  setRemindedHours,
+  setRemindedMinutes,
   updateOptionMessageId,
   updatePollMessageId,
   updateVoterMessageId
 } from "./db.js";
 import { formatDeadline, formatOptionLabel, parseDateList, parseLocalDateTime } from "./dateUtils.js";
+import { formatRemainingTime, normalizeReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import { buildOptionMessage, buildPollHeaderMessage, buildResultMessage, buildVotedMembersMessage } from "./render.js";
 import type { Poll, PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { statusFromEmoji, VOTE_EMOJIS } from "./voteEmojis.js";
@@ -41,6 +42,7 @@ export type SchedulePollInput = {
   datesInput: string;
   deadlineInput: string;
   candidateEndTime?: string;
+  reminderMinutes?: number[];
   notifyTarget: string | null;
   multipleChoice: boolean;
   anonymous: boolean;
@@ -86,6 +88,7 @@ export function buildPollFromInput(params: SchedulePollInput): { poll: Poll; opt
   }
 
   const pollId = makeId("poll");
+  const reminderMinutes = normalizeReminderMinutes(params.reminderMinutes ?? config.reminderHoursBefore.map((hours) => hours * 60));
   const poll: Poll = {
     id: pollId,
     guildId: params.guildId,
@@ -98,6 +101,8 @@ export function buildPollFromInput(params: SchedulePollInput): { poll: Poll; opt
     notifyTarget: params.notifyTarget,
     multipleChoice: true,
     anonymous: params.anonymous,
+    reminderMinutes: JSON.stringify(reminderMinutes),
+    remindedMinutes: "[]",
     status: "open",
     remindedHours: "[]",
     createdAt: new Date().toISOString(),
@@ -333,24 +338,35 @@ export async function checkDuePolls(clientChannelsFetch: (channelId: string) => 
   }
 }
 
-export async function checkReminders(clientChannelsFetch: (channelId: string) => Promise<unknown>, reminderHours: number[]): Promise<void> {
+export async function checkReminders(clientChannelsFetch: (channelId: string) => Promise<unknown>): Promise<void> {
   const now = Date.now();
   for (const poll of getOpenPolls()) {
     const deadline = new Date(poll.deadline).getTime();
-    const remainingHours = (deadline - now) / 1000 / 60 / 60;
-    const reminded = JSON.parse(poll.remindedHours) as number[];
-    const next = reminderHours.find((hours) => remainingHours <= hours && !reminded.includes(hours) && remainingHours > 0);
-    if (!next) {
+    const createdAt = new Date(poll.createdAt).getTime();
+    const remainingMs = deadline - now;
+    if (remainingMs <= 0) {
       continue;
     }
 
+    const reminderMinutes = parseReminderMinutesJson(poll.reminderMinutes);
+    const remindedMinutes = parseReminderMinutesJson(poll.remindedMinutes, []);
+    const dueReminderMinutes = reminderMinutes.filter((minutes) => {
+      const reminderMs = minutes * 60_000;
+      const pollExistedBeforeReminder = deadline - createdAt >= reminderMs;
+      return pollExistedBeforeReminder && remainingMs <= reminderMs && !remindedMinutes.includes(minutes);
+    });
+    if (dueReminderMinutes.length === 0) {
+      continue;
+    }
+
+    const newlyRemindedMinutes = [...new Set([...remindedMinutes, ...dueReminderMinutes])].sort((a, b) => b - a);
     const channel = await clientChannelsFetch(poll.channelId).catch(() => null);
     if (isGuildTextChannel(channel)) {
       await channel.send(
-        `日程調整「${poll.title}」の締切まであと約${next}時間です。\n締切: ${formatDeadline(poll.deadline)}`
+        `日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}です。\n締切: ${formatDeadline(poll.deadline)}`
       );
     }
-    setRemindedHours(poll.id, [...reminded, next]);
+    setRemindedMinutes(poll.id, newlyRemindedMinutes);
   }
 }
 
