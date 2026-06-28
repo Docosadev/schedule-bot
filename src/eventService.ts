@@ -10,6 +10,7 @@ import {
   StringSelectMenuInteraction
 } from "discord.js";
 import { randomUUID } from "node:crypto";
+import { config } from "./config.js";
 import { parseLocalDateTime } from "./dateUtils.js";
 
 type EventCandidate = {
@@ -57,6 +58,41 @@ function buildLocationValue(location: string, venueUrl: string | null): string {
     return location;
   }
   return `${location}\n${venueUrl}`;
+}
+
+function buildGoogleMapsSearchUrl(location: string): string | null {
+  if (isProbablyUrl(location)) {
+    return null;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+}
+
+function resolveVenueUrl(location: string, venueUrl: string | null): string | null {
+  if (venueUrl) {
+    return venueUrl;
+  }
+  if (isProbablyUrl(location)) {
+    return location;
+  }
+  return buildGoogleMapsSearchUrl(location);
+}
+
+function buildStaticMapUrl(location: string): string | null {
+  if (!config.googleMapsApiKey || isProbablyUrl(location)) {
+    return null;
+  }
+
+  const params = new URLSearchParams({
+    center: location,
+    zoom: "16",
+    size: "640x320",
+    scale: "2",
+    language: "ja",
+    region: "JP",
+    markers: `color:red|${location}`,
+    key: config.googleMapsApiKey
+  });
+  return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }
 
 function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
@@ -190,8 +226,9 @@ function assertCreateEventPermissions(interaction: ChatInputCommandInteraction):
 }
 
 function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">, candidate: EventCandidate): EmbedBuilder {
-  const venueUrl = state.venueUrl ?? (isProbablyUrl(state.location) ? state.location : null);
-  return new EmbedBuilder()
+  const venueUrl = resolveVenueUrl(state.location, state.venueUrl);
+  const staticMapUrl = buildStaticMapUrl(state.location);
+  const embed = new EmbedBuilder()
     .setColor(0xe33555)
     .addFields(
       { name: "イベント名", value: state.title },
@@ -202,6 +239,11 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
       { name: "元メッセージ", value: `[日程調整結果](${state.sourceMessageUrl})` }
     )
     .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
+
+  if (staticMapUrl) {
+    embed.setImage(staticMapUrl);
+  }
+  return embed;
 }
 
 function formatCreateEventError(error: unknown): string {

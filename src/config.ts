@@ -10,6 +10,7 @@ export type Config = {
   reminderHoursBefore: number[];
   docosaMention?: string;
   docosaRoleId?: string;
+  googleMapsApiKey?: string;
   webPort: number;
   webHost: string;
   webBaseUrl: string;
@@ -45,6 +46,7 @@ export const config: Config = {
   reminderHoursBefore: parseReminderHours(process.env.REMINDER_HOURS_BEFORE),
   docosaMention: process.env.DOCOSA_MENTION,
   docosaRoleId: process.env.DOCOSA_ROLE_ID,
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
   webPort: Number(process.env.WEB_PORT ?? process.env.PORT ?? "3000"),
   webHost: process.env.WEB_HOST ?? "0.0.0.0",
   webBaseUrl:

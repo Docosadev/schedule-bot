@@ -43,6 +43,7 @@ BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
 DOCOSA_MENTION=
 DOCOSA_ROLE_ID=your_docosa_role_id
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 WEB_PORT=3000
 WEB_HOST=0.0.0.0
 WEB_BASE_URL=http://localhost:3000
@@ -56,6 +57,7 @@ WEB_BASE_URL=http://localhost:3000
 - `DATABASE_URL`: Neon などの Postgres 接続文字列。本番運用では設定推奨です
 - `DATABASE_PATH`: `DATABASE_URL` 未設定時の SQLite 保存先
 - `DOCOSA_ROLE_ID`: 結果通知でメンションするロールID
+- `GOOGLE_MAPS_API_KEY`: 開催情報にGoogle Static Maps画像を表示する場合に設定
 - `WEB_BASE_URL`: `/schedule` で返す WebUI のURL。Renderでは省略すると `RENDER_EXTERNAL_URL` を使います
 
 `DOCOSA_ROLE_ID` を使う場合、対象ロールがメンション可能になっているか、BOTに十分な権限があることを確認してください。
@@ -121,6 +123,7 @@ DISCORD_GUILD_ID=your_server_id
 DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 BOT_TIMEZONE=Asia/Tokyo
 DOCOSA_ROLE_ID=your_docosa_role_id
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 WEB_HOST=0.0.0.0
 ```
 
@@ -235,6 +238,8 @@ ID: poll_xxx
 - 同票などで複数候補がある場合は、実行者だけが選べるセレクトメニューを表示
 - `location` は開催場所名、住所、またはURLを指定
 - `venue_url` は任意。`location` にURLを入れた場合は省略できます
+- `GOOGLE_MAPS_API_KEY` を設定している場合、`location` の住所から地図画像を表示します
+- 地図画像そのものはDiscord仕様上Google Mapsへ直接リンクできないため、開催場所欄のURLから開けるようにします
 
 対象メッセージを明示したい場合は `message_url` を指定できます。
 
