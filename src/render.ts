@@ -64,18 +64,18 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
   const mentions = [leadingMention, poll.notifyTarget].filter((mention): mention is string => Boolean(mention)).join("\n");
   const winnerLines =
     winners.length > 0
-      ? winners.map((item) => `> ## ${item.option.label}\n${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes} ${item.count}票`)
+      ? winners.map((item) => `> ${item.option.label}\n参加${item.count}票`)
       : ["まだ投票は入っておらんかったようじゃ。"];
 
   return [
     mentions,
-    `# **${poll.title} 日程調整結果**`,
-    "投票はここで締め切りじゃ。みんな、協力ありがとう。",
+    `## ${poll.title} 日程調整結果`,
+    "投票はここで締め切りじゃ。みんな、協力助かったぞ～！",
     "",
-    winners.length > 1 ? "## 実施候補（同票じゃ）" : "## 実施候補",
+    "実施候補日",
     ...winnerLines,
     "",
-    "くわしい投票状況は、添付の画像にまとめておいたぞ。"
+    "詳しい投票状況は添付の画像にまとめておいたからの～"
   ].filter((line, index) => index !== 0 || line.length > 0).join("\n");
 }
 

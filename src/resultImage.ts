@@ -88,30 +88,23 @@ export async function buildResultMatrixImage(
   const margin = 28;
   const nameColumnWidth = 220;
   const optionColumnWidth = 176;
-  const titleHeight = 62;
+  const legendHeight = 38;
   const headerHeight = 84;
   const rowHeight = 44;
   const footerHeight = 26;
   const rowCount = Math.max(participants.length, 1);
   const tableWidth = nameColumnWidth + optionColumnWidth * poll.options.length;
   const width = margin * 2 + tableWidth;
-  const height = margin * 2 + titleHeight + headerHeight + rowHeight * rowCount + footerHeight;
+  const height = margin * 2 + legendHeight + headerHeight + rowHeight * rowCount + footerHeight;
   const tableX = margin;
-  const tableY = margin + titleHeight;
+  const tableY = margin + legendHeight;
   const voteMap = new Map(votes.map((vote) => [`${vote.optionId}:${vote.userId}`, vote.status]));
   const textLayers: TextLayer[] = [
     {
-      text: truncate(`${poll.title} 日程調整結果`, 32),
-      left: margin,
-      top: margin + 2,
-      fontSize: 28,
-      weight: "bold"
-    },
-    {
       text: formatVoteDefinitions(),
       left: margin,
-      top: margin + 40,
-      fontSize: 14,
+      top: margin + 5,
+      fontSize: 15,
       color: "#57606a"
     },
     {

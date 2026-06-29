@@ -20,7 +20,8 @@ export const VOTE_MEANINGS: Record<VoteStatus, string> = {
 
 export function formatVoteDefinitions(withEmoji = false): string {
   const prefix = (status: VoteStatus) => (withEmoji ? `${VOTE_EMOJIS[status]} ` : "");
-  return `${prefix("yes")}${VOTE_MEANINGS.yes} / ${prefix("no")}${VOTE_MEANINGS.no} / ${prefix("maybe")}${VOTE_MEANINGS.maybe}`;
+  const label = (status: VoteStatus) => (withEmoji ? "" : `${VOTE_LABELS[status]} `);
+  return `${prefix("yes")}${label("yes")}${VOTE_MEANINGS.yes} / ${prefix("no")}${label("no")}${VOTE_MEANINGS.no} / ${prefix("maybe")}${label("maybe")}${VOTE_MEANINGS.maybe}`;
 }
 
 export function statusFromEmoji(emoji: string): VoteStatus | null {

@@ -131,15 +131,15 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
   for (const line of lines) {
     const normalized = line.replace(/\*\*/g, "");
     const currentTitle =
-      normalized.match(/^#\s+(.+?)\s+日程調整結果$/)?.[1] ??
-      normalized.match(/^#\s+日程調整結果:\s*(.+)$/)?.[1] ??
+      normalized.match(/^#{1,2}\s+(.+?)\s+日程調整結果$/)?.[1] ??
+      normalized.match(/^#{1,2}\s+日程調整結果:\s*(.+)$/)?.[1] ??
       null;
     if (currentTitle) {
       title = currentTitle.trim();
       continue;
     }
 
-    const candidateMatch = normalized.match(/^>\s*##\s+(\d{4}-\d{2}-\d{2})\(([^)]+)\)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
+    const candidateMatch = normalized.match(/^>\s*(?:##\s*)?(\d{4}-\d{2}-\d{2})\(([^)]+)\)\s+(\d{2}:\d{2})-(\d{2}:\d{2})$/);
     if (!candidateMatch) {
       continue;
     }
