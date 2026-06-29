@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import { formatDeadline } from "./dateUtils.js";
-import { getVoteBreakdown, getVoteCounts, getVotesForPoll } from "./db.js";
+import { getVoteBreakdown, getVotesForPoll } from "./db.js";
 import { formatReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import type { PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { formatVoteDefinitions, VOTE_LABELS, VOTE_MEANINGS } from "./voteEmojis.js";
@@ -54,9 +54,9 @@ export function buildVotedMembersMessage(names: string[]): string {
 }
 
 export async function buildResultMessage(poll: PollWithOptions, leadingMention?: string): Promise<string> {
-  const counts = await getVoteCounts(poll.id);
+  const breakdown = await getVoteBreakdown(poll.id);
   const ranked = [...poll.options]
-    .map((option) => ({ option, count: counts.get(option.id) ?? 0 }))
+    .map((option) => ({ option, count: breakdown.get(option.id)?.yes ?? 0 }))
     .sort((a, b) => b.count - a.count || a.option.position - b.option.position);
 
   const topCount = ranked[0]?.count ?? 0;
@@ -64,7 +64,10 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
   const mentions = [leadingMention, poll.notifyTarget].filter((mention): mention is string => Boolean(mention)).join("\n");
   const winnerLines =
     winners.length > 0
-      ? winners.map((item) => `> ${item.option.label}\n参加${item.count}票`)
+      ? winners.map((item) => {
+          const counts = breakdown.get(item.option.id) ?? { yes: 0, maybe: 0, no: 0 };
+          return `> ${item.option.label}\n参加${counts.yes}票、不参加${counts.no}票、未定${counts.maybe}票`;
+        })
       : ["まだ投票は入っておらんかったようじゃ。"];
 
   return [
