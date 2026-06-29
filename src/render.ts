@@ -22,7 +22,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
   return new EmbedBuilder()
     .setTitle(`${poll.title} 日程調整`)
     .setColor(poll.status === "open" ? 0x2f80ed : 0x828282)
-    .setDescription("候補ごとのメッセージにリアクションするのじゃ。予定が変わったら押し直してよいぞ。")
+    .setDescription("候補ごとのメッセージにリアクションするのじゃ。予定が変わったら、リアクションを押しなおしてよいからの～。")
     .addFields(
       { name: "締切", value: formatDeadline(poll.deadline), inline: true },
       { name: "表示", value: visibilityLabel, inline: true },
@@ -41,7 +41,7 @@ export function buildPollHeaderMessage(poll: PollWithOptions): string {
     "@everyone",
     "下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。",
     formatVoteDefinitions(true),
-    "予定が変わったら、リアクションを押し直してよいぞ。"
+    "予定が変わったら、リアクションを押しなおしてよいからの～。"
   ].join("\n");
 }
 

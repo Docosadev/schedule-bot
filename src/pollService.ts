@@ -470,7 +470,7 @@ export async function checkReminders(clientChannelsFetch: (channelId: string) =>
     const channel = await clientChannelsFetch(poll.channelId).catch(() => null);
     if (isGuildTextChannel(channel)) {
       await channel.send(
-        `日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}じゃ。\n締切: ${formatDeadline(poll.deadline)}\nまだの者は投票しておくのじゃ。`
+        `日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}じゃ。\n締切: ${formatDeadline(poll.deadline)}\nみんなの投票、まっとるぞ～！`
       );
     }
     await setRemindedMinutes(poll.id, newlyRemindedMinutes);

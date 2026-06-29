@@ -286,7 +286,7 @@ async function createFromCandidate(
   }
 
   return {
-    content: "@everyone\n開催情報が確定したぞ。確認しておくんじゃ。",
+    content: "@everyone\n開催情報が確定したから、確認しておくんじゃ。",
     embeds: [buildEventInfoEmbed(state, candidate)],
     files: [buildEventThumbnailAttachment()],
     allowedMentions: { parse: ["everyone"] }
