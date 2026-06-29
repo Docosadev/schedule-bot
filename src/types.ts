@@ -5,6 +5,7 @@ export type Poll = {
   id: string;
   guildId: string;
   channelId: string;
+  parentChannelId: string | null;
   messageId: string | null;
   voterMessageId: string | null;
   creatorId: string;

@@ -119,7 +119,7 @@ export async function handleScheduleCommand(interaction: ChatInputCommandInterac
   url.searchParams.set("token", session.token);
 
   await interaction.reply({
-    content: `作成画面じゃ。ここから日程調整を始めるのじゃ。\n${url.toString()}\n\nこのリンクは30分だけ有効じゃ。作ったアンケートはこのチャンネルに投稿されるぞ。`,
+    content: `作成画面じゃ。ここから日程調整を始めるのじゃ。\n${url.toString()}\n\nこのリンクは30分だけ有効じゃ。作ったアンケートは新しいスレッドに投稿されるぞ。`,
     ephemeral: true
   });
 }

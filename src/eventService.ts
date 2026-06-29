@@ -293,6 +293,51 @@ async function createFromCandidate(
   };
 }
 
+function resolveEventInfoOutputChannel(interaction: ChatInputCommandInteraction | StringSelectMenuInteraction): GuildTextBasedChannel {
+  if (!isGuildTextChannel(interaction.channel)) {
+    throw new Error("サーバー内のテキストチャンネルで使うコマンドじゃ。");
+  }
+
+  if (interaction.channel.isThread()) {
+    const parent = interaction.channel.parent;
+    if (isGuildTextChannel(parent)) {
+      return parent;
+    }
+  }
+
+  return interaction.channel;
+}
+
+function assertCanPostEventInfo(
+  interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
+  channel: GuildTextBasedChannel
+): void {
+  const botMember = interaction.guild?.members.me;
+  if (!botMember) {
+    throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
+  }
+
+  const permissions = channel.permissionsFor(botMember);
+  if (
+    !permissions?.has(PermissionFlagsBits.SendMessages) ||
+    !permissions.has(PermissionFlagsBits.EmbedLinks) ||
+    !permissions.has(PermissionFlagsBits.MentionEveryone)
+  ) {
+    throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
+  }
+}
+
+async function postEventInfo(
+  interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
+  state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
+  candidate: EventCandidate
+): Promise<Message<true>> {
+  const outputChannel = resolveEventInfoOutputChannel(interaction);
+  assertCanPostEventInfo(interaction, outputChannel);
+  const message = await createFromCandidate(interaction, state, candidate);
+  return outputChannel.send(message);
+}
+
 function buildCandidateSelect(state: PendingEventCreation): ActionRowBuilder<StringSelectMenuBuilder> {
   const select = new StringSelectMenuBuilder()
     .setCustomId(`create_event:${state.token}`)
@@ -350,8 +395,8 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
     };
 
     if (parsed.candidates.length === 1) {
-      const message = await createFromCandidate(interaction, baseState, parsed.candidates[0]);
-      await interaction.editReply(message);
+      const postedMessage = await postEventInfo(interaction, baseState, parsed.candidates[0]);
+      await interaction.editReply(`開催情報を本流チャンネルへ投稿しておいたぞ: ${postedMessage.url}`);
       return;
     }
 
@@ -402,8 +447,8 @@ export async function handleCreateEventSelection(interaction: StringSelectMenuIn
   await interaction.message.edit({ content: "開催情報をまとめておるぞ。少し待つのじゃ。", components: [] });
 
   try {
-    const message = await createFromCandidate(interaction, state, candidate);
-    await interaction.message.edit(message);
+    const postedMessage = await postEventInfo(interaction, state, candidate);
+    await interaction.message.edit({ content: `開催情報を本流チャンネルへ投稿しておいたぞ: ${postedMessage.url}`, components: [] });
   } catch (error) {
     await interaction.message.edit({ content: formatCreateEventError(error), components: [] });
   }

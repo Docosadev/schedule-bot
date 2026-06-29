@@ -71,6 +71,7 @@ function migrateSqlite(): void {
       id TEXT PRIMARY KEY,
       guild_id TEXT NOT NULL,
       channel_id TEXT NOT NULL,
+      parent_channel_id TEXT,
       message_id TEXT,
       voter_message_id TEXT,
       creator_id TEXT NOT NULL,
@@ -114,6 +115,7 @@ function migrateSqlite(): void {
 
   ensureSqliteColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
   ensureSqliteColumn("poll_options", "message_id", "TEXT");
+  ensureSqliteColumn("polls", "parent_channel_id", "TEXT");
   ensureSqliteColumn("polls", "voter_message_id", "TEXT");
   ensureSqliteColumn("polls", "reminder_minutes", "TEXT NOT NULL DEFAULT '[1440]'");
   ensureSqliteColumn("polls", "reminded_minutes", "TEXT NOT NULL DEFAULT '[]'");
@@ -126,6 +128,7 @@ async function migratePostgres(): Promise<void> {
       id TEXT PRIMARY KEY,
       guild_id TEXT NOT NULL,
       channel_id TEXT NOT NULL,
+      parent_channel_id TEXT,
       message_id TEXT,
       voter_message_id TEXT,
       creator_id TEXT NOT NULL,
@@ -169,6 +172,7 @@ async function migratePostgres(): Promise<void> {
 
   await ensurePostgresColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
   await ensurePostgresColumn("poll_options", "message_id", "TEXT");
+  await ensurePostgresColumn("polls", "parent_channel_id", "TEXT");
   await ensurePostgresColumn("polls", "voter_message_id", "TEXT");
   await ensurePostgresColumn("polls", "reminder_minutes", "TEXT NOT NULL DEFAULT '[1440]'");
   await ensurePostgresColumn("polls", "reminded_minutes", "TEXT NOT NULL DEFAULT '[]'");
@@ -201,6 +205,7 @@ function mapPoll(row: Record<string, unknown>): Poll {
     id: String(row.id),
     guildId: String(row.guild_id),
     channelId: String(row.channel_id),
+    parentChannelId: row.parent_channel_id ? String(row.parent_channel_id) : null,
     messageId: row.message_id ? String(row.message_id) : null,
     voterMessageId: row.voter_message_id ? String(row.voter_message_id) : null,
     creatorId: String(row.creator_id),
@@ -243,6 +248,7 @@ function pollValues(poll: Poll): unknown[] {
     poll.id,
     poll.guildId,
     poll.channelId,
+    poll.parentChannelId,
     poll.messageId,
     poll.voterMessageId,
     poll.creatorId,
@@ -281,11 +287,11 @@ export async function createPoll(poll: Poll, options: PollOption[]): Promise<voi
       await client.query(
         `
           INSERT INTO polls (
-            id, guild_id, channel_id, message_id, voter_message_id, creator_id, title, deadline,
+            id, guild_id, channel_id, parent_channel_id, message_id, voter_message_id, creator_id, title, deadline,
             notify_target, multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
             created_at, closed_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         `,
         pollValues(poll)
       );
@@ -305,12 +311,12 @@ export async function createPoll(poll: Poll, options: PollOption[]): Promise<voi
   const db = getSqlite();
   const insertPoll = db.prepare(`
     INSERT INTO polls (
-      id, guild_id, channel_id, message_id, voter_message_id, creator_id, title, deadline,
+      id, guild_id, channel_id, parent_channel_id, message_id, voter_message_id, creator_id, title, deadline,
       notify_target, multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
       created_at, closed_at
     )
     VALUES (
-      @id, @guildId, @channelId, @messageId, @voterMessageId, @creatorId, @title, @deadline,
+      @id, @guildId, @channelId, @parentChannelId, @messageId, @voterMessageId, @creatorId, @title, @deadline,
       @notifyTarget, @multipleChoice, @anonymous, @reminderMinutes, @remindedMinutes, @status, @remindedHours,
       @createdAt, @closedAt
     )

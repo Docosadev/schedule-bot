@@ -8,6 +8,7 @@ import {
   MessageReaction,
   PartialMessageReaction,
   PartialUser,
+  ThreadAutoArchiveDuration,
   User
 } from "discord.js";
 import { config } from "./config.js";
@@ -59,6 +60,16 @@ export function isGuildTextChannel(channel: unknown): channel is GuildTextBasedC
   return typeof channel === "object" && channel !== null && "send" in channel && "messages" in channel;
 }
 
+type ThreadParentChannel = GuildTextBasedChannel & {
+  threads: {
+    create(options: { name: string; autoArchiveDuration: ThreadAutoArchiveDuration; reason?: string }): Promise<GuildTextBasedChannel>;
+  };
+};
+
+function isThreadParentChannel(channel: unknown): channel is ThreadParentChannel {
+  return isGuildTextChannel(channel) && "threads" in channel && typeof channel.threads === "object" && channel.threads !== null;
+}
+
 async function resolveDocosaMention(guild: Guild | null): Promise<string> {
   if (config.docosaRoleId) {
     return `<@&${config.docosaRoleId}>`;
@@ -91,6 +102,53 @@ function resolveScheduleNotifyMention(): string {
   return config.scheduleNotifyRoleId ? `<@&${config.scheduleNotifyRoleId}>` : "@everyone";
 }
 
+function buildThreadName(title: string): string {
+  const name = `${title} 日程調整`;
+  return name.length > 100 ? `${name.slice(0, 99)}…` : name;
+}
+
+function resolveScheduleThreadParent(channel: GuildTextBasedChannel): ThreadParentChannel {
+  const parent = channel.isThread() ? channel.parent : channel;
+  if (!isThreadParentChannel(parent)) {
+    throw new Error("このチャンネルではスレッドを作れんようじゃ。通常のテキストチャンネルで試しておくれ。");
+  }
+  return parent;
+}
+
+async function createScheduleThread(channel: GuildTextBasedChannel, title: string): Promise<{
+  parentChannel: ThreadParentChannel;
+  thread: GuildTextBasedChannel;
+}> {
+  const parentChannel = resolveScheduleThreadParent(channel);
+  const name = buildThreadName(title);
+  const options = {
+    name,
+    autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
+    reason: "Schedule poll thread"
+  };
+
+  try {
+    return {
+      parentChannel,
+      thread: await parentChannel.threads.create(options)
+    };
+  } catch (error) {
+    console.warn("failed to create 7-day schedule thread; retrying with 1-day auto archive", { channelId: parentChannel.id }, error);
+    return {
+      parentChannel,
+      thread: await parentChannel.threads.create({
+        ...options,
+        autoArchiveDuration: ThreadAutoArchiveDuration.OneDay
+      })
+    };
+  }
+}
+
+async function fetchPollChannel(interaction: ChatInputCommandInteraction, poll: PollWithOptions): Promise<GuildTextBasedChannel | null> {
+  const channel = await interaction.client.channels.fetch(poll.channelId).catch(() => null);
+  return isGuildTextChannel(channel) ? channel : null;
+}
+
 export function buildPollFromInput(params: SchedulePollInput): { poll: Poll; options: PollOption[] } {
   const dates = parseDateList(params.datesInput);
   const deadline = parseLocalDateTime(params.deadlineInput);
@@ -114,6 +172,7 @@ export function buildPollFromInput(params: SchedulePollInput): { poll: Poll; opt
     id: pollId,
     guildId: params.guildId,
     channelId: params.channelId,
+    parentChannelId: null,
     messageId: null,
     voterMessageId: null,
     creatorId: params.creatorId,
@@ -149,16 +208,24 @@ export async function publishSchedulePoll(
 ): Promise<{ pollId: string; messageUrl: string }> {
   const { poll, options } = buildPollFromInput(input);
   const sentMessages: Message[] = [];
-
-  await createPoll(poll, options);
-  const savedPoll = await getPoll(poll.id);
-  if (!savedPoll) {
-    throw new Error("アンケートの保存に失敗しました。");
-  }
+  let thread: GuildTextBasedChannel | null = null;
 
   try {
+    const createdThread = await createScheduleThread(channel, poll.title);
+    thread = createdThread.thread;
+    const pollInThread: Poll = {
+      ...poll,
+      channelId: thread.id,
+      parentChannelId: createdThread.parentChannel.id
+    };
+    await createPoll(pollInThread, options);
+    const savedPoll = await getPoll(poll.id);
+    if (!savedPoll) {
+      throw new Error("アンケートの保存に失敗しました。");
+    }
+
     const notifyMention = resolveScheduleNotifyMention();
-    const headerMessage = await channel.send({
+    const headerMessage = await thread.send({
       content: buildPollHeaderMessage(savedPoll, notifyMention),
       allowedMentions: { parse: config.scheduleNotifyRoleId ? ["roles"] : ["everyone"] }
     });
@@ -166,7 +233,7 @@ export async function publishSchedulePoll(
     await updatePollMessageId(poll.id, headerMessage.id);
 
     for (const option of savedPoll.options) {
-      const optionMessage = await channel.send({
+      const optionMessage = await thread.send({
         content: buildOptionMessage(option),
         flags: MessageFlags.SuppressNotifications
       });
@@ -177,7 +244,7 @@ export async function publishSchedulePoll(
       await optionMessage.react(VOTE_EMOJIS.maybe);
     }
 
-    const voterMessage = await channel.send({
+    const voterMessage = await thread.send({
       content: buildVotedMembersMessage([]),
       flags: MessageFlags.SuppressNotifications
     });
@@ -186,8 +253,9 @@ export async function publishSchedulePoll(
 
     return { pollId: poll.id, messageUrl: headerMessage.url };
   } catch (error) {
-    await deletePoll(poll.id);
+    await deletePoll(poll.id).catch(() => undefined);
     await Promise.allSettled(sentMessages.map((message) => message.delete()));
+    await thread?.delete("Failed to publish schedule poll").catch(() => undefined);
     throw error;
   }
 }
@@ -416,6 +484,14 @@ export async function closeAndReportPoll(channel: GuildTextBasedChannel, poll: P
 }
 
 async function deletePollMessages(channel: GuildTextBasedChannel, poll: PollWithOptions): Promise<number> {
+  if (poll.parentChannelId && channel.isThread()) {
+    const deleted = await channel.delete("Schedule poll deleted").then(
+      () => true,
+      () => false
+    );
+    return deleted ? 1 : 0;
+  }
+
   const messageIds = [
     poll.messageId,
     ...poll.options.map((option) => option.messageId),
@@ -502,17 +578,18 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
     return;
   }
 
-  const syncedPoll = isGuildTextChannel(interaction.channel) ? await syncVotesFromDiscord(interaction.channel, poll) : poll;
+  const pollChannel = await fetchPollChannel(interaction, poll);
+  const syncedPoll = pollChannel ? await syncVotesFromDiscord(pollChannel, poll) : poll;
   await closePoll(syncedPoll.id, "closed");
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(interaction.guild);
-  if (!isGuildTextChannel(interaction.channel)) {
+  if (!pollChannel) {
     await interaction.editReply("アンケートは締め切ったが、結果を投稿するチャンネルが見つからんかったのじゃ。");
     return;
   }
 
-  const matrixAttachment = await buildResultMatrixAttachment(interaction.channel, closedPoll);
-  await interaction.channel.send({
+  const matrixAttachment = await buildResultMatrixAttachment(pollChannel, closedPoll);
+  await pollChannel.send({
     content: await buildResultMessage(closedPoll, docosaMention),
     files: matrixAttachment ? [matrixAttachment] : [],
     allowedMentions: { parse: ["users", "roles"] }
@@ -553,13 +630,11 @@ export async function deletePollByCommand(interaction: ChatInputCommandInteracti
 
   await interaction.reply({ content: "アンケートを片付けておるぞ。少し待つのじゃ。", ephemeral: true });
 
-  let deletedMessages = 0;
-  if (isGuildTextChannel(interaction.channel)) {
-    deletedMessages = await deletePollMessages(interaction.channel, poll);
-  }
+  const pollChannel = await fetchPollChannel(interaction, poll);
+  const deletedMessages = pollChannel ? await deletePollMessages(pollChannel, poll) : 0;
 
   await deletePoll(pollId);
-  await interaction.editReply(`アンケートを削除しておいたぞ。関連メッセージも ${deletedMessages} 件片付けたのじゃ。`);
+  await interaction.editReply(`アンケートを削除しておいたぞ。関連メッセージ/スレッドも ${deletedMessages} 件片付けたのじゃ。`);
 }
 
 export function canManagePoll(interaction: ChatInputCommandInteraction, poll: PollWithOptions): boolean {

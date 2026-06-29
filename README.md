@@ -2,11 +2,13 @@
 
 Discord 用の日程調整 BOT です。
 `/schedule` から Web 作成画面を開き、カレンダー UI で候補日を選んで Discord に投稿できます。
-投票は候補日ごとのリアクションで行い、締切後は結果メッセージと投票マトリクス画像を投稿します。
+日程調整は自動作成された専用スレッド内で行い、投票は候補日ごとのリアクションで行います。
+締切後はスレッド内に結果メッセージと投票マトリクス画像を投稿し、確定した開催情報だけ本流チャンネルへ投稿します。
 
 ## 主な機能
 
 - `/schedule` で Web 作成画面を発行
+- 日程調整ごとに専用スレッドを自動作成
 - カレンダー UI で候補日を選択
 - 開始時間と終了時間を候補日に自動付与
 - `⭕ 参加 / ❌ 不参加 / 🔺 未定（行けたら行く）` で投票
@@ -69,14 +71,20 @@ WEB_BASE_URL=http://localhost:3000
 Bot に以下の権限を付けてサーバーへ招待します。
 
 - Send Messages
+- Create Public Threads
+- Send Messages in Threads
 - Embed Links
 - Add Reactions
 - Read Message History
 - Manage Messages
+- Manage Threads
 - Mention Everyone
 - Use Slash Commands
 
 `Manage Messages` は、同じ候補日に複数リアクションが付いたとき、BOTが余分なリアクションを外すために必要です。
+`Create Public Threads` は、日程調整専用スレッドを自動作成するために必要です。
+`Send Messages in Threads` は、日程調整スレッド内へ候補日や結果を投稿するために必要です。
+`Manage Threads` は、アンケート削除時に日程調整スレッドごと片付けるために必要です。
 `Mention Everyone` は、開催情報の確定通知で `@everyone` を送るために必要です。
 
 ### 4. コマンド登録
@@ -156,6 +164,8 @@ Discord 接続完了まで確認したい場合は `/readyz` も使えますが�
 
 Web 作成画面のURLを返します。
 リンクは30分間有効です。
+WebUIから投稿すると、実行したチャンネル配下に `{タイトル} 日程調整` というスレッドを作成します。
+スレッドの自動アーカイブ期間は7日を指定します。Discord側で利用できない場合は24時間へフォールバックします。
 
 作成画面では以下を入力します。
 
@@ -168,6 +178,8 @@ Web 作成画面のURLを返します。
 投稿例:
 
 ```text
+# スレッド名: 定例会 日程調整
+
 # 定例会 日程調整
 締切: 2026-07-01(水) 23:59
 ID: poll_xxx
@@ -198,7 +210,7 @@ ID: poll_xxx
 
 ### `/schedule-admin close poll_id:poll_xxx`
 
-アンケートを手動で締め切り、結果を投稿します。
+アンケートを手動で締め切り、日程調整スレッドへ結果を投稿します。
 
 結果メッセージ例:
 
@@ -227,11 +239,13 @@ ID: poll_xxx
 ### `/schedule-admin delete poll_id:poll_xxx`
 
 アンケート情報と関連 Discord メッセージを削除します。
+スレッド作成後のアンケートでは、日程調整スレッドごと削除します。
 すでに手動削除済みのメッセージは無視します。
 
 ### `/create-event price:5500 attendees:3 location:会場名 venue_url:https://example.com`
 
 直近100件のメッセージから日程調整結果を探し、開催情報のまとめを投稿します。
+日程調整スレッド内で実行した場合、開催情報は親の本流チャンネルへ投稿します。
 
 主な挙動:
 
