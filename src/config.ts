@@ -8,6 +8,7 @@ export type Config = {
   databasePath: string;
   timezone: string;
   reminderHoursBefore: number[];
+  scheduleNotifyRoleId?: string;
   docosaMention?: string;
   docosaRoleId?: string;
   googleMapsApiKey?: string;
@@ -44,6 +45,7 @@ export const config: Config = {
   databasePath: process.env.DATABASE_PATH ?? "./data/schedule-bot.sqlite",
   timezone: process.env.BOT_TIMEZONE ?? "Asia/Tokyo",
   reminderHoursBefore: parseReminderHours(process.env.REMINDER_HOURS_BEFORE),
+  scheduleNotifyRoleId: process.env.SCHEDULE_NOTIFY_ROLE_ID,
   docosaMention: process.env.DOCOSA_MENTION,
   docosaRoleId: process.env.DOCOSA_ROLE_ID,
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,

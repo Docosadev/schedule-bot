@@ -87,6 +87,10 @@ async function resolveDocosaMention(guild: Guild | null): Promise<string> {
   return `<@&${role.id}>`;
 }
 
+function resolveScheduleNotifyMention(): string {
+  return config.scheduleNotifyRoleId ? `<@&${config.scheduleNotifyRoleId}>` : "@everyone";
+}
+
 export function buildPollFromInput(params: SchedulePollInput): { poll: Poll; options: PollOption[] } {
   const dates = parseDateList(params.datesInput);
   const deadline = parseLocalDateTime(params.deadlineInput);
@@ -153,9 +157,10 @@ export async function publishSchedulePoll(
   }
 
   try {
+    const notifyMention = resolveScheduleNotifyMention();
     const headerMessage = await channel.send({
-      content: buildPollHeaderMessage(savedPoll),
-      allowedMentions: { parse: ["everyone"] }
+      content: buildPollHeaderMessage(savedPoll, notifyMention),
+      allowedMentions: { parse: config.scheduleNotifyRoleId ? ["roles"] : ["everyone"] }
     });
     sentMessages.push(headerMessage);
     await updatePollMessageId(poll.id, headerMessage.id);

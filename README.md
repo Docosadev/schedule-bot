@@ -41,6 +41,7 @@ DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 DATABASE_PATH=./data/schedule-bot.sqlite
 BOT_TIMEZONE=Asia/Tokyo
 REMINDER_HOURS_BEFORE=24,3
+SCHEDULE_NOTIFY_ROLE_ID=your_schedule_notify_role_id
 DOCOSA_MENTION=
 DOCOSA_ROLE_ID=your_docosa_role_id
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
@@ -56,11 +57,12 @@ WEB_BASE_URL=http://localhost:3000
 - `DISCORD_GUILD_ID`: コマンド登録先サーバーID。設定すると反映が速いギルドコマンドになります
 - `DATABASE_URL`: Neon などの Postgres 接続文字列。本番運用では設定推奨です
 - `DATABASE_PATH`: `DATABASE_URL` 未設定時の SQLite 保存先
+- `SCHEDULE_NOTIFY_ROLE_ID`: 日程調整開始時にメンションするロールID。未設定時は `@everyone` を使います
 - `DOCOSA_ROLE_ID`: 結果通知でメンションするロールID
 - `GOOGLE_MAPS_API_KEY`: 開催情報にGoogle Static Maps画像を表示する場合に設定
 - `WEB_BASE_URL`: `/schedule` で返す WebUI のURL。Renderでは省略すると `RENDER_EXTERNAL_URL` を使います
 
-`DOCOSA_ROLE_ID` を使う場合、対象ロールがメンション可能になっているか、BOTに十分な権限があることを確認してください。
+`SCHEDULE_NOTIFY_ROLE_ID` や `DOCOSA_ROLE_ID` を使う場合、対象ロールがメンション可能になっているか、BOTに十分な権限があることを確認してください。
 
 ### 3. Discord Bot 権限
 
@@ -170,7 +172,7 @@ Web 作成画面のURLを返します。
 締切: 2026-07-01(水) 23:59
 ID: poll_xxx
 
-@everyone
+<@&schedule_notify_role_id>
 下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。
 ⭕ 参加 / ❌ 不参加 / 🔺 未定（行けたら行く）
 予定が変わったら、リアクションを押しなおしてよいからの～。

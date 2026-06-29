@@ -32,13 +32,13 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
     .setFooter({ text: `ID: ${poll.id}` });
 }
 
-export function buildPollHeaderMessage(poll: PollWithOptions): string {
+export function buildPollHeaderMessage(poll: PollWithOptions, notifyMention: string): string {
   return [
     `# **${poll.title} 日程調整**`,
     `締切: ${formatDeadline(poll.deadline)}`,
     `ID: ${poll.id}`,
     "",
-    "@everyone",
+    notifyMention,
     "下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。",
     formatVoteDefinitions(true),
     "予定が変わったら、リアクションを押しなおしてよいからの～。"
