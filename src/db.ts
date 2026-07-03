@@ -3,7 +3,16 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Pool, type PoolClient } from "pg";
 import { config } from "./config.js";
-import type { Poll, PollOption, PollStatus, PollWithOptions, Vote, VoteStatus } from "./types.js";
+import type {
+  PokemonProduct,
+  PokemonProductInput,
+  Poll,
+  PollOption,
+  PollStatus,
+  PollWithOptions,
+  Vote,
+  VoteStatus
+} from "./types.js";
 
 export type VoteBreakdown = {
   yes: number;
@@ -111,6 +120,19 @@ function migrateSqlite(): void {
 
     CREATE INDEX IF NOT EXISTS idx_polls_status_deadline ON polls(status, deadline);
     CREATE INDEX IF NOT EXISTS idx_votes_poll ON votes(poll_id);
+
+    CREATE TABLE IF NOT EXISTS pokemon_products (
+      source_key TEXT NOT NULL,
+      product_key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      price TEXT,
+      status TEXT,
+      image_url TEXT,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      PRIMARY KEY (source_key, product_key)
+    );
   `);
 
   ensureSqliteColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
@@ -168,6 +190,19 @@ async function migratePostgres(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_polls_status_deadline ON polls(status, deadline);
     CREATE INDEX IF NOT EXISTS idx_votes_poll ON votes(poll_id);
+
+    CREATE TABLE IF NOT EXISTS pokemon_products (
+      source_key TEXT NOT NULL,
+      product_key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      price TEXT,
+      status TEXT,
+      image_url TEXT,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      PRIMARY KEY (source_key, product_key)
+    );
   `);
 
   await ensurePostgresColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
@@ -232,6 +267,20 @@ function mapOption(row: Record<string, unknown>): PollOption {
     emoji: String(row.emoji),
     startsAt: String(row.starts_at),
     label: String(row.label)
+  };
+}
+
+function mapPokemonProduct(row: Record<string, unknown>): PokemonProduct {
+  return {
+    sourceKey: String(row.source_key),
+    productKey: String(row.product_key),
+    name: String(row.name),
+    url: String(row.url),
+    price: row.price ? String(row.price) : null,
+    status: row.status ? String(row.status) : null,
+    imageUrl: row.image_url ? String(row.image_url) : null,
+    firstSeenAt: String(row.first_seen_at),
+    lastSeenAt: String(row.last_seen_at)
   };
 }
 
@@ -611,4 +660,77 @@ export async function deletePoll(pollId: string): Promise<void> {
     return;
   }
   getSqlite().prepare("DELETE FROM polls WHERE id = ?").run(pollId);
+}
+
+export async function getPokemonProductsBySource(sourceKey: string): Promise<PokemonProduct[]> {
+  if (usePostgres()) {
+    const result = await getPostgresPool().query("SELECT * FROM pokemon_products WHERE source_key = $1", [sourceKey]);
+    return result.rows.map(mapPokemonProduct);
+  }
+
+  const rows = getSqlite().prepare("SELECT * FROM pokemon_products WHERE source_key = ?").all(sourceKey) as Record<string, unknown>[];
+  return rows.map(mapPokemonProduct);
+}
+
+export async function recordPokemonProductSnapshot(sourceKey: string, products: PokemonProductInput[]): Promise<PokemonProductInput[]> {
+  const existingProducts = await getPokemonProductsBySource(sourceKey);
+  const existingKeys = new Set(existingProducts.map((product) => product.productKey));
+  const isInitialSnapshot = existingKeys.size === 0;
+  const now = new Date().toISOString();
+  const uniqueProducts = [...new Map(products.map((product) => [product.productKey, product])).values()];
+  const newProducts = uniqueProducts.filter((product) => !existingKeys.has(product.productKey));
+
+  if (usePostgres()) {
+    await withPostgresTransaction(async (client) => {
+      for (const product of uniqueProducts) {
+        await client.query(
+          `
+            INSERT INTO pokemon_products (
+              source_key, product_key, name, url, price, status, image_url, first_seen_at, last_seen_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+            ON CONFLICT (source_key, product_key) DO UPDATE SET
+              name = EXCLUDED.name,
+              url = EXCLUDED.url,
+              price = EXCLUDED.price,
+              status = EXCLUDED.status,
+              image_url = EXCLUDED.image_url,
+              last_seen_at = EXCLUDED.last_seen_at
+          `,
+          [
+            product.sourceKey,
+            product.productKey,
+            product.name,
+            product.url,
+            product.price,
+            product.status,
+            product.imageUrl,
+            now
+          ]
+        );
+      }
+    });
+  } else {
+    const insert = getSqlite().prepare(`
+      INSERT INTO pokemon_products (
+        source_key, product_key, name, url, price, status, image_url, first_seen_at, last_seen_at
+      )
+      VALUES (@sourceKey, @productKey, @name, @url, @price, @status, @imageUrl, @seenAt, @seenAt)
+      ON CONFLICT(source_key, product_key) DO UPDATE SET
+        name = excluded.name,
+        url = excluded.url,
+        price = excluded.price,
+        status = excluded.status,
+        image_url = excluded.image_url,
+        last_seen_at = excluded.last_seen_at
+    `);
+
+    getSqlite().transaction(() => {
+      for (const product of uniqueProducts) {
+        insert.run({ ...product, seenAt: now });
+      }
+    })();
+  }
+
+  return isInitialSnapshot ? [] : newProducts;
 }

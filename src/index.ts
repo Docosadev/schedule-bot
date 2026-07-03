@@ -10,6 +10,7 @@ import { config } from "./config.js";
 import { migrate } from "./db.js";
 import { handleCreateEventSelection } from "./eventService.js";
 import { checkDuePolls, checkReminders, handleReactionAdd, handleReactionRemove } from "./pollService.js";
+import { checkPokemonProductsIfDue } from "./pokemonProductWatcher.js";
 import { startWebServer } from "./webServer.js";
 
 await migrate();
@@ -31,6 +32,7 @@ client.once(Events.ClientReady, (readyClient) => {
   setInterval(() => {
     void checkDuePolls((channelId) => client.channels.fetch(channelId));
     void checkReminders((channelId) => client.channels.fetch(channelId));
+    void checkPokemonProductsIfDue((channelId) => client.channels.fetch(channelId));
   }, 60_000);
 });
 

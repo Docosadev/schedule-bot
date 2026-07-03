@@ -43,3 +43,17 @@ export type Vote = {
 export type PollWithOptions = Poll & {
   options: PollOption[];
 };
+
+export type PokemonProduct = {
+  sourceKey: string;
+  productKey: string;
+  name: string;
+  url: string;
+  price: string | null;
+  status: string | null;
+  imageUrl: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
+export type PokemonProductInput = Omit<PokemonProduct, "firstSeenAt" | "lastSeenAt">;

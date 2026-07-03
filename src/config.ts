@@ -15,6 +15,8 @@ export type Config = {
   webPort: number;
   webHost: string;
   webBaseUrl: string;
+  pokemonProductNotifyChannelId?: string;
+  pokemonProductCheckTimes: string[];
 };
 
 function requireEnv(name: string): string {
@@ -37,6 +39,15 @@ function parseReminderHours(value: string | undefined): number[] {
     .sort((a, b) => b - a);
 }
 
+function parseTimes(value: string | undefined, fallback: string[]): string[] {
+  const times = (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => /^\d{2}:\d{2}$/.test(item));
+
+  return times.length ? [...new Set(times)] : fallback;
+}
+
 export const config: Config = {
   token: requireEnv("DISCORD_TOKEN"),
   clientId: requireEnv("DISCORD_CLIENT_ID"),
@@ -54,5 +65,7 @@ export const config: Config = {
   webBaseUrl:
     process.env.WEB_BASE_URL ??
     process.env.RENDER_EXTERNAL_URL ??
-    `http://localhost:${process.env.WEB_PORT ?? process.env.PORT ?? "3000"}`
+    `http://localhost:${process.env.WEB_PORT ?? process.env.PORT ?? "3000"}`,
+  pokemonProductNotifyChannelId: process.env.POKEMON_PRODUCT_NOTIFY_CHANNEL_ID ?? "1522540129879851158",
+  pokemonProductCheckTimes: parseTimes(process.env.POKEMON_PRODUCT_CHECK_TIMES, ["09:00", "15:00", "21:00"])
 };

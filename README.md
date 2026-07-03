@@ -22,6 +22,7 @@ Discord 用の日程調整 BOT です。
 - 手動締切、締切延長、キャンセル、削除
 - 削除時に関連 Discord メッセージも削除
 - SQLite または Postgres/Neon にアンケート情報を保存
+- ポケモンセンターオンラインの商品追加を定期チェックしてDiscordへ通知
 
 ## セットアップ
 
@@ -47,6 +48,8 @@ SCHEDULE_NOTIFY_ROLE_ID=your_schedule_notify_role_id
 DOCOSA_MENTION=
 DOCOSA_ROLE_ID=your_docosa_role_id
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+POKEMON_PRODUCT_NOTIFY_CHANNEL_ID=1522540129879851158
+POKEMON_PRODUCT_CHECK_TIMES=09:00,15:00,21:00
 WEB_PORT=3000
 WEB_HOST=0.0.0.0
 WEB_BASE_URL=http://localhost:3000
@@ -62,6 +65,8 @@ WEB_BASE_URL=http://localhost:3000
 - `SCHEDULE_NOTIFY_ROLE_ID`: 日程調整開始時にメンションするロールID。未設定時は `@everyone` を使います
 - `DOCOSA_ROLE_ID`: 結果通知でメンションするロールID
 - `GOOGLE_MAPS_API_KEY`: 開催情報にGoogle Static Maps画像を表示する場合に設定
+- `POKEMON_PRODUCT_NOTIFY_CHANNEL_ID`: ポケモンセンターオンラインの商品追加通知先チャンネルID
+- `POKEMON_PRODUCT_CHECK_TIMES`: 商品チェック時刻。`BOT_TIMEZONE` 基準でカンマ区切り指定
 - `WEB_BASE_URL`: `/schedule` で返す WebUI のURL。Renderでは省略すると `RENDER_EXTERNAL_URL` を使います
 
 `SCHEDULE_NOTIFY_ROLE_ID` や `DOCOSA_ROLE_ID` を使う場合、対象ロールがメンション可能になっているか、BOTに十分な権限があることを確認してください。
@@ -134,6 +139,8 @@ DATABASE_URL=postgresql://user:password@host/database?sslmode=require
 BOT_TIMEZONE=Asia/Tokyo
 DOCOSA_ROLE_ID=your_docosa_role_id
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+POKEMON_PRODUCT_NOTIFY_CHANNEL_ID=1522540129879851158
+POKEMON_PRODUCT_CHECK_TIMES=09:00,15:00,21:00
 WEB_HOST=0.0.0.0
 ```
 
