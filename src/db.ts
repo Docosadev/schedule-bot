@@ -682,20 +682,14 @@ export async function recordPokemonProductSnapshot(sourceKey: string, products: 
 
   if (usePostgres()) {
     await withPostgresTransaction(async (client) => {
-      for (const product of uniqueProducts) {
+      for (const product of newProducts) {
         await client.query(
           `
             INSERT INTO pokemon_products (
               source_key, product_key, name, url, price, status, image_url, first_seen_at, last_seen_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-            ON CONFLICT (source_key, product_key) DO UPDATE SET
-              name = EXCLUDED.name,
-              url = EXCLUDED.url,
-              price = EXCLUDED.price,
-              status = EXCLUDED.status,
-              image_url = EXCLUDED.image_url,
-              last_seen_at = EXCLUDED.last_seen_at
+            ON CONFLICT (source_key, product_key) DO NOTHING
           `,
           [
             product.sourceKey,
@@ -716,17 +710,11 @@ export async function recordPokemonProductSnapshot(sourceKey: string, products: 
         source_key, product_key, name, url, price, status, image_url, first_seen_at, last_seen_at
       )
       VALUES (@sourceKey, @productKey, @name, @url, @price, @status, @imageUrl, @seenAt, @seenAt)
-      ON CONFLICT(source_key, product_key) DO UPDATE SET
-        name = excluded.name,
-        url = excluded.url,
-        price = excluded.price,
-        status = excluded.status,
-        image_url = excluded.image_url,
-        last_seen_at = excluded.last_seen_at
+      ON CONFLICT(source_key, product_key) DO NOTHING
     `);
 
     getSqlite().transaction(() => {
-      for (const product of uniqueProducts) {
+      for (const product of newProducts) {
         insert.run({ ...product, seenAt: now });
       }
     })();
