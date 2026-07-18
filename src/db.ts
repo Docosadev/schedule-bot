@@ -51,7 +51,9 @@ function getPostgresPool(): Pool {
   if (!postgresPool) {
     postgresPool = new Pool({
       connectionString: config.databaseUrl,
-      max: 5,
+      max: 2,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 10_000,
       ssl: shouldUseSsl(config.databaseUrl) ? { rejectUnauthorized: false } : undefined
     });
   }
@@ -681,29 +683,31 @@ export async function recordPokemonProductSnapshot(sourceKey: string, products: 
   const newProducts = uniqueProducts.filter((product) => !existingKeys.has(product.productKey));
 
   if (usePostgres()) {
-    await withPostgresTransaction(async (client) => {
-      for (const product of newProducts) {
-        await client.query(
-          `
-            INSERT INTO pokemon_products (
-              source_key, product_key, name, url, price, status, image_url, first_seen_at, last_seen_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-            ON CONFLICT (source_key, product_key) DO NOTHING
-          `,
-          [
-            product.sourceKey,
-            product.productKey,
-            product.name,
-            product.url,
-            product.price,
-            product.status,
-            product.imageUrl,
-            now
-          ]
-        );
-      }
-    });
+    if (newProducts.length > 0) {
+      await getPostgresPool().query(
+        `
+          INSERT INTO pokemon_products (
+            source_key, product_key, name, url, price, status, image_url, first_seen_at, last_seen_at
+          )
+          SELECT source_key, product_key, name, url, price, status, image_url, seen_at, seen_at
+          FROM UNNEST(
+            $1::text[], $2::text[], $3::text[], $4::text[],
+            $5::text[], $6::text[], $7::text[], $8::text[]
+          ) AS product(source_key, product_key, name, url, price, status, image_url, seen_at)
+          ON CONFLICT (source_key, product_key) DO NOTHING
+        `,
+        [
+          newProducts.map((product) => product.sourceKey),
+          newProducts.map((product) => product.productKey),
+          newProducts.map((product) => product.name),
+          newProducts.map((product) => product.url),
+          newProducts.map((product) => product.price),
+          newProducts.map((product) => product.status),
+          newProducts.map((product) => product.imageUrl),
+          newProducts.map(() => now)
+        ]
+      );
+    }
   } else {
     const insert = getSqlite().prepare(`
       INSERT INTO pokemon_products (

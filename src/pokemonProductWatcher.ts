@@ -1,6 +1,6 @@
 import { EmbedBuilder, type GuildTextBasedChannel } from "discord.js";
-import { format } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { addDays, format } from "date-fns";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { config } from "./config.js";
 import { recordPokemonProductSnapshot } from "./db.js";
 import { isGuildTextChannel } from "./pollService.js";
@@ -28,7 +28,9 @@ const PRODUCT_SOURCES: ProductSource[] = [
 const PRODUCT_ORIGIN = "https://www.pokemoncenter-online.com";
 const MAX_NOTIFY_PRODUCTS_PER_SOURCE = 10;
 const PRODUCT_EMBED_COLOR = 0x3b4cca;
-const executedSlots = new Set<string>();
+const MAX_TIMEOUT_MS = 2_147_000_000;
+let productCheckTimer: NodeJS.Timeout | null = null;
+let productCheckRunning = false;
 
 function stripTags(value: string): string {
   return decodeHtmlEntities(value.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]*>/g, " "))
@@ -245,23 +247,61 @@ export async function checkPokemonProducts(clientChannelsFetch: (channelId: stri
   }
 }
 
-export async function checkPokemonProductsIfDue(clientChannelsFetch: (channelId: string) => Promise<unknown>): Promise<void> {
+export function startPokemonProductScheduler(clientChannelsFetch: (channelId: string) => Promise<unknown>): void {
   if (!config.pokemonProductNotifyChannelId) {
     return;
   }
 
-  const now = toZonedTime(new Date(), config.timezone);
-  const today = format(now, "yyyy-MM-dd");
-  const currentTime = format(now, "HH:mm");
-  if (!config.pokemonProductCheckTimes.includes(currentTime)) {
+  const currentTime = format(toZonedTime(new Date(), config.timezone), "HH:mm");
+  if (config.pokemonProductCheckTimes.includes(currentTime)) {
+    scheduleProductCheck(clientChannelsFetch, 0);
     return;
   }
+  scheduleNextProductCheck(clientChannelsFetch);
+}
 
-  const slot = `${today} ${currentTime}`;
-  if (executedSlots.has(slot)) {
-    return;
+function scheduleNextProductCheck(clientChannelsFetch: (channelId: string) => Promise<unknown>): void {
+  if (productCheckTimer) {
+    clearTimeout(productCheckTimer);
   }
 
-  executedSlots.add(slot);
-  await checkPokemonProducts(clientChannelsFetch);
+  const nextCheckAt = findNextProductCheckAt(new Date());
+  const delay = Math.max(0, Math.min(nextCheckAt.getTime() - Date.now(), MAX_TIMEOUT_MS));
+  scheduleProductCheck(clientChannelsFetch, delay);
+  console.log(`pokemon product scheduler next run: ${new Date(Date.now() + delay).toISOString()}`);
+}
+
+function scheduleProductCheck(clientChannelsFetch: (channelId: string) => Promise<unknown>, delay: number): void {
+  productCheckTimer = setTimeout(() => {
+    productCheckTimer = null;
+    void runScheduledProductCheck(clientChannelsFetch);
+  }, delay);
+  productCheckTimer.unref();
+}
+
+async function runScheduledProductCheck(clientChannelsFetch: (channelId: string) => Promise<unknown>): Promise<void> {
+  if (productCheckRunning) {
+    scheduleNextProductCheck(clientChannelsFetch);
+    return;
+  }
+  productCheckRunning = true;
+  try {
+    await checkPokemonProducts(clientChannelsFetch);
+  } catch (error) {
+    console.error("scheduled pokemon product check failed", error);
+  } finally {
+    productCheckRunning = false;
+    scheduleNextProductCheck(clientChannelsFetch);
+  }
+}
+
+function findNextProductCheckAt(now: Date): Date {
+  const zonedNow = toZonedTime(now, config.timezone);
+  const dates = [zonedNow, addDays(zonedNow, 1)];
+  const candidates = dates.flatMap((date) => {
+    const dateKey = format(date, "yyyy-MM-dd");
+    return config.pokemonProductCheckTimes.map((time) => fromZonedTime(`${dateKey}T${time}:00`, config.timezone));
+  });
+
+  return candidates.filter((candidate) => candidate.getTime() > now.getTime()).sort((a, b) => a.getTime() - b.getTime())[0];
 }

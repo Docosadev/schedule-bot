@@ -9,8 +9,9 @@ import { handleCreateEventSlashCommand, handleScheduleAdminCommand, handleSchedu
 import { config } from "./config.js";
 import { migrate } from "./db.js";
 import { handleCreateEventSelection } from "./eventService.js";
-import { checkDuePolls, checkReminders, handleReactionAdd, handleReactionRemove } from "./pollService.js";
-import { checkPokemonProductsIfDue } from "./pokemonProductWatcher.js";
+import { handleReactionAdd, handleReactionRemove } from "./pollService.js";
+import { startPokemonProductScheduler } from "./pokemonProductWatcher.js";
+import { startPollScheduler } from "./pollScheduler.js";
 import { startWebServer } from "./webServer.js";
 
 await migrate();
@@ -28,12 +29,8 @@ startWebServer(client);
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
-
-  setInterval(() => {
-    void checkDuePolls((channelId) => client.channels.fetch(channelId));
-    void checkReminders((channelId) => client.channels.fetch(channelId));
-    void checkPokemonProductsIfDue((channelId) => client.channels.fetch(channelId));
-  }, 60_000);
+  void startPollScheduler(client);
+  startPokemonProductScheduler((channelId) => client.channels.fetch(channelId));
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

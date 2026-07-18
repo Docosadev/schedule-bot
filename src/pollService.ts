@@ -36,6 +36,7 @@ import { formatDeadline, formatOptionLabel, parseDateList, parseLocalDateTime } 
 import { formatRemainingTime, normalizeReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import { buildOptionMessage, buildPollHeaderMessage, buildResultMessage, buildVotedMembersMessage } from "./render.js";
 import { buildResultMatrixImage, type MatrixParticipant } from "./resultImage.js";
+import { requestPollScheduleRefresh } from "./schedulerHooks.js";
 import type { Poll, PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { statusFromEmoji, VOTE_EMOJIS } from "./voteEmojis.js";
 
@@ -251,6 +252,7 @@ export async function publishSchedulePoll(
     sentMessages.push(voterMessage);
     await updateVoterMessageId(poll.id, voterMessage.id);
 
+    requestPollScheduleRefresh();
     return { pollId: poll.id, messageUrl: headerMessage.url };
   } catch (error) {
     await deletePoll(poll.id).catch(() => undefined);
@@ -574,6 +576,7 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
 
   if (cancelled) {
     await closePoll(poll.id, "cancelled");
+    requestPollScheduleRefresh();
     await interaction.editReply("アンケートをキャンセルしておいたぞ。");
     return;
   }
@@ -581,6 +584,7 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   const pollChannel = await fetchPollChannel(interaction, poll);
   const syncedPoll = pollChannel ? await syncVotesFromDiscord(pollChannel, poll) : poll;
   await closePoll(syncedPoll.id, "closed");
+  requestPollScheduleRefresh();
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(interaction.guild);
   if (!pollChannel) {
@@ -613,6 +617,7 @@ export async function extendPollByCommand(interaction: ChatInputCommandInteracti
   }
 
   await extendPoll(pollId, deadline.toISOString());
+  requestPollScheduleRefresh();
   await interaction.reply(`締切を延ばしておいたぞ: ${formatDeadline(deadline.toISOString())}`);
 }
 
@@ -634,6 +639,7 @@ export async function deletePollByCommand(interaction: ChatInputCommandInteracti
   const deletedMessages = pollChannel ? await deletePollMessages(pollChannel, poll) : 0;
 
   await deletePoll(pollId);
+  requestPollScheduleRefresh();
   await interaction.editReply(`アンケートを削除しておいたぞ。関連メッセージ/スレッドも ${deletedMessages} 件片付けたのじゃ。`);
 }
 

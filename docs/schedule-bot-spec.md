@@ -221,7 +221,7 @@ BOT としてはライブラリ利用が一番扱いやすい。
 - TypeScript
 - discord.js
 - SQLite
-- node-cron または定期チェック用の setInterval
+- 次回の締切・リマインド時刻を予約する setTimeout ベースのスケジューラー
 - date-fns
 - date-holidays
 
@@ -260,4 +260,3 @@ BOT としてはライブラリ利用が一番扱いやすい。
 4. メッセージ本文に現在の票数を反映する
 5. 締切後に自動集計して通知先へメンションする
 6. 平日・土曜・日曜祝日を記号または Embed 表現で区別する
-

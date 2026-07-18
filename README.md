@@ -165,6 +165,19 @@ Interval: 5 minutes
 `/healthz` は Web プロセスの生存確認です。
 Discord 接続完了まで確認したい場合は `/readyz` も使えますが、スリープ復帰直後はDown判定されやすいため、監視URLは `/healthz` 推奨です。
 
+### Neon の Compute 節約
+
+Discord BOT を動かす Render は常時起動しますが、Neon は必要なときだけ起動する構成です。
+
+- BOT 起動時に受付中アンケートを読み込み、次のリマインドまたは締切時刻を `setTimeout` で予約します
+- アンケートの作成、延長、締切、キャンセル、削除時に予約を再計算します
+- 再起動時の復元に加え、取りこぼし対策として12時間ごとに予約を整合確認します
+- 商品チェックは1分ごとの監視ではなく、`POKEMON_PRODUCT_CHECK_TIMES` の次回時刻へ直接予約します
+- PostgreSQL 接続プールは最大2接続、アイドル接続は10秒で解放します
+
+アンケートがない間は、商品チェックと12時間ごとの整合確認以外でDBを定期ポーリングしません。
+Neon Free Plan の Scale to Zero を妨げないよう、5分未満の間隔でDBへ死活監視を行わないでください。
+
 ## コマンド
 
 ### `/schedule`
@@ -311,5 +324,6 @@ ID: poll_xxx
 - Bot Token や `.env` は GitHub に push しないでください
 - Render無料枠ではスリープや再起動が発生します
 - 本番運用では `DATABASE_URL` に Neon などの外部 Postgres を設定してください
+- UptimeRobot の監視先はDBへアクセスしない `/healthz` を使用してください
 - `DATABASE_URL` 未設定時は SQLite を使いますが、PaaS上では永続性に注意してください
 - 既存アンケートの表示文言は、作成時点のメッセージが残ります。表示確認は新しいアンケートで行ってください
