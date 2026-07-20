@@ -22,7 +22,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
   return new EmbedBuilder()
     .setTitle(`${poll.title} 日程調整`)
     .setColor(poll.status === "open" ? 0x2f80ed : 0x828282)
-    .setDescription("候補ごとのメッセージにリアクションしてねー！予定が変わったら、リアクションを押しなおせばオッケーだぞよ！")
+    .setDescription("候補ごとのメッセージにリアクションしてねー！予定が変わったら、リアクションを押しなおせばオッケーだぞー！")
     .addFields(
       { name: "締切", value: formatDeadline(poll.deadline), inline: true },
       { name: "表示", value: visibilityLabel, inline: true },
@@ -41,7 +41,7 @@ export function buildPollHeaderMessage(poll: PollWithOptions, notifyMention: str
     notifyMention,
     "みなのもの～！参加できる候補日にリアクションしてねー！",
     formatVoteDefinitions(true),
-    "予定が変わったら、リアクションを押しなおせばオッケーだぞよ！"
+    "予定が変わったら、リアクションを押しなおせばオッケーだぞー！"
   ].join("\n");
 }
 
@@ -84,7 +84,7 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
 
 export async function buildVoterList(poll: PollWithOptions): Promise<string> {
   if (poll.anonymous) {
-    return "このアンケートは匿名表示モード！投票者一覧はヒミツだぞよ！";
+    return "このアンケートは匿名表示モード！投票者一覧はヒミツだよん！";
   }
 
   const votes = await getVotesForPoll(poll.id);

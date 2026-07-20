@@ -182,7 +182,7 @@ async function fetchSourceMessageByUrl(interaction: ChatInputCommandInteraction,
     throw new Error("指定された結果メッセージが見つからなかったぞよ！");
   }
   if (!message.author.bot) {
-    throw new Error("指定されたメッセージは調整BOTの結果メッセージじゃなさそうだぞよ！");
+    throw new Error("指定されたメッセージは調整BOTの結果メッセージじゃなさそうだぞー！");
   }
 
   return message;
@@ -432,7 +432,7 @@ export async function handleCreateEventSelection(interaction: StringSelectMenuIn
   }
 
   if (interaction.user.id !== state.userId) {
-    await interaction.reply({ content: "この操作ができるのはコマンドの実行者だけだぞよ！", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "この操作ができるのはコマンドの実行者だけだぞー！", flags: MessageFlags.Ephemeral });
     return;
   }
 

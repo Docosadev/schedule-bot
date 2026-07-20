@@ -130,7 +130,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
   if (subcommand === "list") {
     const polls = (await getOpenPolls()).filter((poll) => poll.guildId === interaction.guildId);
     if (polls.length === 0) {
-      await interaction.reply({ content: "受付中のアンケートは今のところゼロだぞよ！", ephemeral: true });
+      await interaction.reply({ content: "受付中のアンケートは今のところゼロだぞー！", ephemeral: true });
       return;
     }
     await interaction.reply({
