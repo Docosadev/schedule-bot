@@ -22,7 +22,7 @@ export async function buildPollEmbed(poll: PollWithOptions): Promise<EmbedBuilde
   return new EmbedBuilder()
     .setTitle(`${poll.title} 日程調整`)
     .setColor(poll.status === "open" ? 0x2f80ed : 0x828282)
-    .setDescription("候補ごとのメッセージにリアクションするのじゃ。予定が変わったら、リアクションを押しなおしてよいからの～。")
+    .setDescription("候補ごとのメッセージにリアクションしてねー！予定が変わったら、リアクションを押しなおせばオッケーだぞよ！")
     .addFields(
       { name: "締切", value: formatDeadline(poll.deadline), inline: true },
       { name: "表示", value: visibilityLabel, inline: true },
@@ -39,9 +39,9 @@ export function buildPollHeaderMessage(poll: PollWithOptions, notifyMention: str
     `ID: ${poll.id}`,
     "",
     notifyMention,
-    "下記の候補日に、参加できるかをリアクションで教えてほしいのじゃ。",
+    "みなのもの～！参加できる候補日にリアクションしてねー！",
     formatVoteDefinitions(true),
-    "予定が変わったら、リアクションを押しなおしてよいからの～。"
+    "予定が変わったら、リアクションを押しなおせばオッケーだぞよ！"
   ].join("\n");
 }
 
@@ -50,7 +50,7 @@ export function buildOptionMessage(option: PollOption): string {
 }
 
 export function buildVotedMembersMessage(names: string[]): string {
-  return `投票済み：${names.length ? names.join(", ") : "まだ誰も投票しておらんようじゃ。"}`;
+  return `投票済み：${names.length ? names.join(", ") : "まだ投票者はゼロ！キミの一票を待ってるぞー！"}`;
 }
 
 export async function buildResultMessage(poll: PollWithOptions, leadingMention?: string): Promise<string> {
@@ -68,23 +68,23 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
           const counts = breakdown.get(item.option.id) ?? { yes: 0, maybe: 0, no: 0 };
           return `> ${item.option.label}\n参加${counts.yes}票、不参加${counts.no}票、未定${counts.maybe}票`;
         })
-      : ["まだ投票は入っておらんかったようじゃ。"];
+      : ["投票はゼロだったぞよ！次回に期待だねー！"];
 
   return [
     mentions,
     `## ${poll.title} 日程調整結果`,
-    "投票はここで締め切りじゃ。みんな、協力助かったぞ～！",
+    "投票しゅーりょー！みなのもの、ご協力ありがとー！",
     "",
     "実施候補日",
     ...winnerLines,
     "",
-    "詳しい投票状況は添付の画像にまとめておいたからの～"
+    "詳しい投票状況は添付画像をチェック！結果に目玉をエレキネットだぞー！"
   ].filter((line, index) => index !== 0 || line.length > 0).join("\n");
 }
 
 export async function buildVoterList(poll: PollWithOptions): Promise<string> {
   if (poll.anonymous) {
-    return "このアンケートは匿名表示モードじゃから、投票者一覧は表示できんのじゃ。";
+    return "このアンケートは匿名表示モード！投票者一覧はヒミツだぞよ！";
   }
 
   const votes = await getVotesForPoll(poll.id);
@@ -110,7 +110,7 @@ export async function buildVoterList(poll: PollWithOptions): Promise<string> {
     ].join("\n");
   });
 
-  return [`投票者一覧じゃ: ${poll.title}`, "", ...lines].join("\n\n");
+  return [`投票者一覧をドドンと公開！: ${poll.title}`, "", ...lines].join("\n\n");
 }
 
 export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
@@ -123,7 +123,7 @@ export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
     return `${option.position}. ${option.label} - ${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes} ${counts.yes} / ${VOTE_LABELS.no} ${VOTE_MEANINGS.no} ${counts.no} / ${VOTE_LABELS.maybe} ${VOTE_MEANINGS.maybe} ${counts.maybe}`;
   });
   return [
-    `日程調整じゃ: ${poll.title}`,
+    `日程調整をチェック！: ${poll.title}`,
     `締切: ${formatDeadline(poll.deadline)}`,
     `リマインド: ${reminders}`,
     `状態: ${poll.status}`,

@@ -111,7 +111,7 @@ function buildThreadName(title: string): string {
 function resolveScheduleThreadParent(channel: GuildTextBasedChannel): ThreadParentChannel {
   const parent = channel.isThread() ? channel.parent : channel;
   if (!isThreadParentChannel(parent)) {
-    throw new Error("このチャンネルではスレッドを作れんようじゃ。通常のテキストチャンネルで試しておくれ。");
+    throw new Error("このチャンネルではスレッドを作れないぞー！通常のテキストチャンネルで試してね！");
   }
   return parent;
 }
@@ -553,7 +553,7 @@ export async function checkReminders(clientChannelsFetch: (channelId: string) =>
     const channel = await clientChannelsFetch(poll.channelId).catch(() => null);
     if (isGuildTextChannel(channel)) {
       await channel.send(
-        `日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}じゃ。\n締切: ${formatDeadline(poll.deadline)}\nみんなの投票、まっとるぞ～！`
+        `リマインドだぞー！日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}！\n締切: ${formatDeadline(poll.deadline)}\nみなのもの、投票をお忘れなく～！`
       );
     }
     await setRemindedMinutes(poll.id, newlyRemindedMinutes);
@@ -566,11 +566,11 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   const pollId = interaction.options.getString("poll_id", true);
   const poll = await getPoll(pollId);
   if (!poll) {
-    await interaction.editReply("指定されたアンケートは見つからんかったぞ。IDをもう一度たしかめるのじゃ。");
+    await interaction.editReply("指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！");
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.editReply("このアンケートを操作する権限がないようじゃ。");
+    await interaction.editReply("このアンケートを操作する権限がないぞよ！");
     return;
   }
 
@@ -588,7 +588,7 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
   const docosaMention = await resolveDocosaMention(interaction.guild);
   if (!pollChannel) {
-    await interaction.editReply("アンケートは締め切ったが、結果を投稿するチャンネルが見つからんかったのじゃ。");
+    await interaction.editReply("アンケートは締め切ったけど、結果を投稿するチャンネルが見つからなかったぞよ！");
     return;
   }
 
@@ -608,11 +608,11 @@ export async function extendPollByCommand(interaction: ChatInputCommandInteracti
   const deadline = parseLocalDateTime(deadlineInput);
 
   if (!poll || !deadline) {
-    await interaction.reply({ content: "アンケートか締切日時を確認できんかったぞ。入力をもう一度見てみるのじゃ。", ephemeral: true });
+    await interaction.reply({ content: "アンケートか締切日時を確認できなかったぞー！入力をもう一度チェックしてね！", ephemeral: true });
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.reply({ content: "このアンケートを操作する権限がないようじゃ。", ephemeral: true });
+    await interaction.reply({ content: "このアンケートを操作する権限がないぞよ！", ephemeral: true });
     return;
   }
 
@@ -625,22 +625,22 @@ export async function deletePollByCommand(interaction: ChatInputCommandInteracti
   const pollId = interaction.options.getString("poll_id", true);
   const poll = await getPoll(pollId);
   if (!poll) {
-    await interaction.reply({ content: "指定されたアンケートは見つからんかったぞ。IDをもう一度たしかめるのじゃ。", ephemeral: true });
+    await interaction.reply({ content: "指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！", ephemeral: true });
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.reply({ content: "このアンケートを操作する権限がないようじゃ。", ephemeral: true });
+    await interaction.reply({ content: "このアンケートを操作する権限がないぞよ！", ephemeral: true });
     return;
   }
 
-  await interaction.reply({ content: "アンケートを片付けておるぞ。少し待つのじゃ。", ephemeral: true });
+  await interaction.reply({ content: "アンケートをお片付け中！ちょこっと待ってねー！", ephemeral: true });
 
   const pollChannel = await fetchPollChannel(interaction, poll);
   const deletedMessages = pollChannel ? await deletePollMessages(pollChannel, poll) : 0;
 
   await deletePoll(pollId);
   requestPollScheduleRefresh();
-  await interaction.editReply(`アンケートを削除しておいたぞ。関連メッセージ/スレッドも ${deletedMessages} 件片付けたのじゃ。`);
+  await interaction.editReply(`アンケートを削除したぞよ！関連メッセージ/スレッドも ${deletedMessages} 件お片付け完了！`);
 }
 
 export function canManagePoll(interaction: ChatInputCommandInteraction, poll: PollWithOptions): boolean {

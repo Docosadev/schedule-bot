@@ -188,7 +188,7 @@ export async function buildResultMatrixImage(
           .join("")
       : (() => {
           textLayers.push({
-            text: "まだ誰も投票しておらんようじゃ",
+            text: "まだ投票者はゼロだぞよ！",
             left: tableX,
             top: tableY + headerHeight + 13,
             width: tableWidth,

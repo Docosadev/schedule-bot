@@ -56,7 +56,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleCreateEventSlashCommand(interaction);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "なにやら予期せぬエラーが起きたようじゃ。";
+    const message = error instanceof Error ? error.message : "むむっ！？予期せぬエラーが発生したぞよ！";
     try {
       if (!interaction.isRepliable()) {
         console.error("interaction is not repliable", error);

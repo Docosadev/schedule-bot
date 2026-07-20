@@ -177,9 +177,9 @@ function isReservationProduct(product: PokemonProductInput): boolean {
 
 function buildProductMessage(source: ProductSource, product: PokemonProductInput): string {
   if (isReservationProduct(product)) {
-    return `おおっ！${source.label}の予約商品が追加されたようじゃ。`;
+    return `速報だぞー！${source.label}に予約商品が追加されたよ！これは激アツの予感！`;
   }
-  return `おおっ！${source.label}の新商品が追加されたようじゃ。`;
+  return `速報だぞー！${source.label}に新商品が追加されたよ！みなのもの、要チェック！`;
 }
 
 function buildProductEmbed(source: ProductSource, product: PokemonProductInput): EmbedBuilder {

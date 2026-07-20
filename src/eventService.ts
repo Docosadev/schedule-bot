@@ -169,20 +169,20 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
 async function fetchSourceMessageByUrl(interaction: ChatInputCommandInteraction, messageUrl: string): Promise<Message<true>> {
   const parsed = parseMessageUrl(messageUrl);
   if (!parsed || parsed.guildId !== interaction.guildId) {
-    throw new Error("メッセージURLを読み取れんかったぞ。同じサーバーの結果メッセージURLを指定しておくれ。");
+    throw new Error("メッセージURLを読み取れなかったぞー！同じサーバーの結果メッセージURLを指定してね！");
   }
 
   const channel = await interaction.client.channels.fetch(parsed.channelId).catch(() => null);
   if (!isGuildTextChannel(channel)) {
-    throw new Error("指定されたメッセージのチャンネルを確認できんかったぞ。");
+    throw new Error("指定されたメッセージのチャンネルを確認できなかったぞよ！");
   }
 
   const message = await channel.messages.fetch(parsed.messageId).catch(() => null);
   if (!message?.inGuild()) {
-    throw new Error("指定された結果メッセージが見つからんかったぞ。");
+    throw new Error("指定された結果メッセージが見つからなかったぞよ！");
   }
   if (!message.author.bot) {
-    throw new Error("指定されたメッセージは調整BOTの結果メッセージではなさそうじゃ。");
+    throw new Error("指定されたメッセージは調整BOTの結果メッセージじゃなさそうだぞよ！");
   }
 
   return message;
@@ -208,28 +208,28 @@ async function resolveSourceMessage(interaction: ChatInputCommandInteraction): P
   }
 
   if (!isGuildTextChannel(interaction.channel)) {
-    throw new Error("サーバー内のテキストチャンネルで使うのじゃ。");
+    throw new Error("サーバー内のテキストチャンネルで使ってねー！");
   }
 
   const message = await findLatestResultMessage(interaction.channel);
   if (!message) {
-    throw new Error("該当する調整BOTのメッセージが見つからんかったぞ。もう一度確認しておくれ。");
+    throw new Error("該当する調整BOTのメッセージが見つからなかったぞー！もう一度チェックしてね！");
   }
   return message;
 }
 
 function assertCreateEventPermissions(interaction: ChatInputCommandInteraction): void {
   if (!interaction.guild || !interaction.guildId) {
-    throw new Error("サーバー内で使うコマンドじゃ。");
+    throw new Error("このコマンドはサーバー内で使ってねー！");
   }
 
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.SendMessages)) {
-    throw new Error("このコマンドはメッセージを送れる者だけが使えるのじゃ。");
+    throw new Error("このコマンドはメッセージを送れる人だけが使えるぞよ！");
   }
 
   const botMember = interaction.guild.members.me;
   if (!botMember) {
-    throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
+    throw new Error("おっと！BOTの権限が足りないぞよ！");
   }
 
   if (isGuildTextChannel(interaction.channel)) {
@@ -240,7 +240,7 @@ function assertCreateEventPermissions(interaction: ChatInputCommandInteraction):
       !permissions.has(PermissionFlagsBits.EmbedLinks) ||
       !permissions.has(PermissionFlagsBits.MentionEveryone)
     ) {
-      throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
+      throw new Error("おっと！BOTの権限が足りないぞよ！");
     }
   }
 }
@@ -253,7 +253,7 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
     .setTitle(state.title)
     .setDescription(buildEventInfoDescription(state, candidate, venueUrl))
     .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
-    .setFooter({ text: "みんなもポケモン、ゲットじゃぞ～！" });
+    .setFooter({ text: "開催情報に目玉をエレキネット！見逃し厳禁だぞー！" });
 
   if (staticMapUrl) {
     embed.setImage(staticMapUrl);
@@ -266,7 +266,7 @@ function formatCreateEventError(error: unknown): string {
     return "開催情報の作成に失敗してしまったぞ。";
   }
   if (/Missing Permissions|Missing Access|権限/.test(error.message)) {
-    return "これはいかん、BOTの権限が足りんようじゃ。";
+    return "おっと！BOTの権限が足りないぞよ！";
   }
   return error.message;
 }
@@ -282,11 +282,11 @@ async function createFromCandidate(
   allowedMentions: { parse: ("everyone")[] };
 }> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
-    throw new Error("サーバー内で使うコマンドじゃ。");
+    throw new Error("このコマンドはサーバー内で使ってねー！");
   }
 
   return {
-    content: "@everyone\n開催情報が確定したから、確認しておくんじゃ。",
+    content: "@everyone\n開催情報が決定したぞー！みなのもの、要チェック！",
     embeds: [buildEventInfoEmbed(state, candidate)],
     files: [buildEventThumbnailAttachment()],
     allowedMentions: { parse: ["everyone"] }
@@ -295,7 +295,7 @@ async function createFromCandidate(
 
 function resolveEventInfoOutputChannel(interaction: ChatInputCommandInteraction | StringSelectMenuInteraction): GuildTextBasedChannel {
   if (!isGuildTextChannel(interaction.channel)) {
-    throw new Error("サーバー内のテキストチャンネルで使うコマンドじゃ。");
+    throw new Error("サーバー内のテキストチャンネルで使ってねー！");
   }
 
   if (interaction.channel.isThread()) {
@@ -314,7 +314,7 @@ function assertCanPostEventInfo(
 ): void {
   const botMember = interaction.guild?.members.me;
   if (!botMember) {
-    throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
+    throw new Error("おっと！BOTの権限が足りないぞよ！");
   }
 
   const permissions = channel.permissionsFor(botMember);
@@ -323,7 +323,7 @@ function assertCanPostEventInfo(
     !permissions.has(PermissionFlagsBits.EmbedLinks) ||
     !permissions.has(PermissionFlagsBits.MentionEveryone)
   ) {
-    throw new Error("これはいかん、BOTの権限が足りんようじゃ。");
+    throw new Error("おっと！BOTの権限が足りないぞよ！");
   }
 }
 
@@ -341,7 +341,7 @@ async function postEventInfo(
 function buildCandidateSelect(state: PendingEventCreation): ActionRowBuilder<StringSelectMenuBuilder> {
   const select = new StringSelectMenuBuilder()
     .setCustomId(`create_event:${state.token}`)
-    .setPlaceholder("採用する日程を選ぶのじゃ")
+    .setPlaceholder("採用する日程を選んでねー！")
     .addOptions(
       state.candidates.map((candidate, index) => ({
         label: candidate.label,
@@ -361,15 +361,15 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
   const venueUrl = interaction.options.getString("venue_url")?.trim() || null;
 
   if (attendees <= 0) {
-    await interaction.reply({ content: "これこれ、参加人数に0は指定できんぞ。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "参加人数に0は指定できないぞよ！", flags: MessageFlags.Ephemeral });
     return;
   }
   if (price < 0) {
-    await interaction.reply({ content: "利用総額は0円以上で指定しておくれ。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "利用総額は0円以上で指定してねー！", flags: MessageFlags.Ephemeral });
     return;
   }
   if (!location) {
-    await interaction.reply({ content: "会場リンクや場所を入力しておくれ。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "会場リンクや場所を入力してねー！", flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -379,7 +379,7 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
     const sourceMessage = await resolveSourceMessage(interaction);
     const parsed = parseResultMessage(sourceMessage.content);
     if (!parsed) {
-      await interaction.editReply("メッセージの解析に失敗してしまったぞ。フォーマットを確認しておくれ。");
+      await interaction.editReply("メッセージの解析に失敗しちゃったぞよ！フォーマットをチェックしてね！");
       return;
     }
 
@@ -410,7 +410,7 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
     pendingEventCreations.set(token, state);
 
     await interaction.editReply({
-      content: "おっと、複数の候補日が見つかったぞ！どの日程で開催情報をまとめるんじゃ？",
+      content: "おっと、候補日が複数あるぞー！開催する日程を選んでね！",
       components: [buildCandidateSelect(state)]
     });
   } catch (error) {
@@ -427,24 +427,24 @@ export async function handleCreateEventSelection(interaction: StringSelectMenuIn
   const state = pendingEventCreations.get(token);
   if (!state || Date.now() - state.createdAt > PENDING_EVENT_TTL_MS) {
     pendingEventCreations.delete(token);
-    await interaction.reply({ content: "選択の期限が切れてしまったようじゃ。もう一度 `/create-event` を実行しておくれ。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "選択の期限が切れちゃったぞよ！もう一度 `/create-event` を実行してね！", flags: MessageFlags.Ephemeral });
     return;
   }
 
   if (interaction.user.id !== state.userId) {
-    await interaction.reply({ content: "これこれ、この操作は実行者のみ可能じゃぞ。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "この操作ができるのはコマンドの実行者だけだぞよ！", flags: MessageFlags.Ephemeral });
     return;
   }
 
   const candidate = state.candidates[Number(interaction.values[0])];
   if (!candidate) {
-    await interaction.reply({ content: "選ばれた日程を確認できんかったぞ。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "選ばれた日程を確認できなかったぞよ！", flags: MessageFlags.Ephemeral });
     return;
   }
 
   pendingEventCreations.delete(token);
   await interaction.deferUpdate();
-  await interaction.message.edit({ content: "開催情報をまとめておるぞ。少し待つのじゃ。", components: [] });
+  await interaction.message.edit({ content: "開催情報をまとめてるぞー！ちょこっと待ってね！", components: [] });
 
   try {
     const postedMessage = await postEventInfo(interaction, state, candidate);
