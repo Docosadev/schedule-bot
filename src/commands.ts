@@ -2,6 +2,7 @@ import {
   ChatInputCommandInteraction,
   ChannelType,
   PermissionFlagsBits,
+  Routes,
   SlashCommandBuilder
 } from "discord.js";
 import { config } from "./config.js";
@@ -141,6 +142,18 @@ export const personalSettingsCommand = new SlashCommandBuilder()
     subcommand.setName("pokemon-watcher").setDescription("ポケモン商品監視を設定します")
       .addBooleanOption((option) => option.setName("enabled").setDescription("有効にするか").setRequired(true))
       .addChannelOption((option) => option.setName("channel").setDescription("通知先").addChannelTypes(ChannelType.GuildText))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("profile").setDescription("このサーバー内のBot名とアイコンを変更します")
+      .addStringOption((option) =>
+        option.setName("name").setDescription("サーバー内で表示するBot名").setMinLength(1).setMaxLength(32)
+      )
+      .addAttachmentOption((option) =>
+        option.setName("avatar").setDescription("サーバー内で表示するPNG・JPEG・WebP・GIF画像")
+      )
+      .addBooleanOption((option) =>
+        option.setName("reset_avatar").setDescription("サーバー固有アイコンを解除して公開アイコンへ戻す")
+      )
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
@@ -317,6 +330,32 @@ export async function handlePersonalSettingsCommand(interaction: ChatInputComman
     return;
   }
 
+  if (subcommand === "profile") {
+    const nickname = interaction.options.getString("name")?.trim() || null;
+    const avatar = interaction.options.getAttachment("avatar");
+    const resetAvatar = interaction.options.getBoolean("reset_avatar") ?? false;
+    if (!nickname && !avatar && !resetAvatar) {
+      await interaction.reply({ content: "変更するBot名またはアイコンを指定してください。", ephemeral: true });
+      return;
+    }
+    if (avatar && resetAvatar) {
+      await interaction.reply({ content: "アイコン画像とアイコン解除は同時に指定できません。", ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    const body: { nick?: string; avatar?: string | null } = {};
+    if (nickname) body.nick = nickname;
+    if (resetAvatar) {
+      body.avatar = null;
+    } else if (avatar) {
+      body.avatar = await downloadProfileImage(avatar.url, avatar.contentType, avatar.size);
+    }
+    await interaction.client.rest.patch(Routes.guildMember(interaction.guildId, "@me"), { body });
+    await interaction.editReply("このサーバー内のBotプロフィールを更新しました。");
+    return;
+  }
+
   if (subcommand === "style") {
     settings.messageStyle = interaction.options.getString("value", true) as "standard" | "personal";
   } else if (subcommand === "pokemon-watcher") {
@@ -333,4 +372,20 @@ export async function handlePersonalSettingsCommand(interaction: ChatInputComman
   settings.updatedAt = new Date().toISOString();
   await saveGuildSettings(settings);
   await interaction.reply({ content: "個人サーバー設定を更新しました。", ephemeral: true });
+}
+
+async function downloadProfileImage(url: string, contentType: string | null, size: number): Promise<string> {
+  const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  if (!contentType || !allowedTypes.has(contentType)) {
+    throw new Error("アイコンにはPNG、JPEG、WebP、GIF画像を指定してください。");
+  }
+  if (size > 10 * 1024 * 1024) {
+    throw new Error("アイコン画像は10MB以下にしてください。");
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("アイコン画像を取得できませんでした。");
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return `data:${contentType};base64,${bytes.toString("base64")}`;
 }

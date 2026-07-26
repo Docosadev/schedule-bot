@@ -81,16 +81,19 @@ Bot に以下の権限を付けてサーバーへ招待します。
 - Create Public Threads
 - Send Messages in Threads
 - Embed Links
+- Attach Files
 - Add Reactions
 - Read Message History
 - Manage Messages
 - Manage Threads
+- Change Nickname
 - Use Slash Commands
 
 `Manage Messages` は、同じ候補日に複数リアクションが付いたとき、BOTが余分なリアクションを外すために必要です。
 `Create Public Threads` は、日程調整専用スレッドを自動作成するために必要です。
 `Send Messages in Threads` は、日程調整スレッド内へ候補日や結果を投稿するために必要です。
 `Manage Threads` は、アンケート削除時に日程調整スレッドごと片付けるために必要です。
+`Change Nickname` は、個人サーバーでBot名を変更するために必要です。
 全体メンションは送信しないため、`Mention Everyone` 権限は不要です。
 
 ### 4. コマンド登録
@@ -333,7 +336,7 @@ ID: poll_xxx
 
 サーバー管理者は `/schedule-settings` でタイムゾーンと各通知タイミングの初期ロールを設定できます。未設定のサーバーでは通知なし・標準スタイル・個人機能OFFで動作します。
 
-個人用のメッセージスタイルとポケモン商品監視は、`PERSONAL_GUILD_ID`にだけ登録される `/schedule-personal` で管理します。このコマンドは一般サーバーには登録されず、実行時にもサーバーIDを検証します。
+個人用のメッセージスタイル、ポケモン商品監視、サーバー固有のBot名・アイコンは、`PERSONAL_GUILD_ID`にだけ登録される `/schedule-personal` で管理します。このコマンドは一般サーバーには登録されず、実行時にもサーバーIDを検証します。プロフィールは `/schedule-personal profile` で変更できます。
 
 Web作成画面には、そのサーバーでメンション可能な通常ロールだけが表示されます。自由入力のメンション、`@everyone`、`@here` は送信しません。Web作成リンクはDBへハッシュ化して保存され、30分で失効します。
 
