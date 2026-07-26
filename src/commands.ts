@@ -83,17 +83,6 @@ export const scheduleSettingsCommand = new SlashCommandBuilder()
       .addStringOption((option) => option.setName("value").setDescription("例: Asia/Tokyo").setRequired(true).setMaxLength(64))
   )
   .addSubcommand((subcommand) =>
-    subcommand.setName("notify-role").setDescription("通知の初期ロールを変更します")
-      .addStringOption((option) => option.setName("timing").setDescription("通知タイミング").setRequired(true)
-        .addChoices(
-          { name: "初回投稿", value: "initial" },
-          { name: "締切前リマインド", value: "reminder" },
-          { name: "締切・集計結果", value: "result" },
-          { name: "開催情報", value: "event" }
-        ))
-      .addRoleOption((option) => option.setName("role").setDescription("省略するとメンションなし").setRequired(false))
-  )
-  .addSubcommand((subcommand) =>
     subcommand.setName("notifications").setDescription("すべての通知ロールをまとめて変更します")
   )
   .addSubcommand((subcommand) =>
@@ -254,17 +243,6 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
       return;
     }
     settings.timezone = timezone;
-  } else if (subcommand === "notify-role") {
-    const timing = interaction.options.getString("timing", true);
-    const role = interaction.options.getRole("role");
-    if (role && (role.managed || role.id === interaction.guildId || !role.mentionable)) {
-      await interaction.reply({ content: "通知可能な通常ロールを選んでください。", ephemeral: true });
-      return;
-    }
-    if (timing === "initial") settings.defaultInitialNotifyRoleId = role?.id ?? null;
-    if (timing === "reminder") settings.defaultReminderNotifyRoleId = role?.id ?? null;
-    if (timing === "result") settings.defaultResultNotifyRoleId = role?.id ?? null;
-    if (timing === "event") settings.defaultEventNotifyRoleId = role?.id ?? null;
   } else if (subcommand === "delete-data") {
     if (interaction.options.getString("confirm", true) !== "DELETE") {
       await interaction.reply({ content: "削除を確定するには `DELETE` と正確に入力してください。", ephemeral: true });
