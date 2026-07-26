@@ -1,6 +1,8 @@
 import {
   ActionRowBuilder,
   AttachmentBuilder,
+  ChannelSelectMenuBuilder,
+  ChannelType,
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildTextBasedChannel,
@@ -42,8 +44,9 @@ type PendingEventCreation = {
   candidates: EventCandidate[];
   price: number | null;
   attendees: number | null;
-  location: string | null;
-  venueUrl: string | null;
+  address: string | null;
+  eventChannelId: string | null;
+  customMessage: string | null;
   fee: number | null;
   pollId: string | null;
   createdAt: number;
@@ -66,24 +69,9 @@ function formatYen(amount: number): string {
   return new Intl.NumberFormat("ja-JP").format(amount);
 }
 
-function isProbablyUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value.trim());
-}
-
-function buildLocationValue(location: string | null, venueUrl: string | null): string | null {
-  if (!location) {
-    return venueUrl;
-  }
-  if (!venueUrl || venueUrl === location) {
-    return location;
-  }
-  return `${location}\n${venueUrl}`;
-}
-
 function buildEventInfoDescription(
   state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
-  candidate: EventCandidate,
-  venueUrl: string | null
+  candidate: EventCandidate
 ): string {
   const sections = [`**🗓️ 開催日時**\n${candidate.label}`];
   if (state.fee !== null) {
@@ -93,48 +81,38 @@ function buildEventInfoDescription(
     sections.push(`**🧾 利用総額**\n${formatYen(state.price)}円`);
   }
   if (state.attendees !== null) {
-    sections.push(`**👥 現地参加人数**\n${state.attendees}人`);
+    sections.push(`**👥 参加人数**\n${state.attendees}人`);
   }
-  const locationValue = buildLocationValue(state.location, venueUrl);
-  if (locationValue) {
-    sections.push(`**📍 開催場所**\n${locationValue}`);
+  if (state.address) {
+    const googleMapsUrl = buildGoogleMapsSearchUrl(state.address);
+    sections.push(`**📍 開催場所（住所）**\n${state.address}\n[Google Mapsで開く](${googleMapsUrl})`);
+  }
+  if (state.eventChannelId) {
+    sections.push(`**💬 開催場所（チャンネル）**\n<#${state.eventChannelId}>`);
+  }
+  if (state.customMessage) {
+    sections.push(`**📝 メッセージ**\n${state.customMessage}`);
   }
   return sections.join("\n\n");
 }
 
-function buildGoogleMapsSearchUrl(location: string): string | null {
-  if (isProbablyUrl(location)) {
-    return null;
-  }
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
+function buildGoogleMapsSearchUrl(address: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
-function resolveVenueUrl(location: string | null, venueUrl: string | null): string | null {
-  if (venueUrl) {
-    return venueUrl;
-  }
-  if (!location) {
-    return null;
-  }
-  if (isProbablyUrl(location)) {
-    return location;
-  }
-  return buildGoogleMapsSearchUrl(location);
-}
-
-function buildStaticMapUrl(location: string | null): string | null {
-  if (!location || !config.googleMapsApiKey || isProbablyUrl(location)) {
+function buildStaticMapUrl(address: string | null): string | null {
+  if (!address || !config.googleMapsApiKey) {
     return null;
   }
 
   const params = new URLSearchParams({
-    center: location,
+    center: address,
     zoom: "16",
     size: "640x400",
     scale: "2",
     language: "ja",
     region: "JP",
-    markers: `color:red|${location}`,
+    markers: `color:red|${address}`,
     key: config.googleMapsApiKey
   });
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
@@ -142,14 +120,6 @@ function buildStaticMapUrl(location: string | null): string | null {
 
 function buildEventThumbnailAttachment(): AttachmentBuilder {
   return new AttachmentBuilder(EVENT_THUMBNAIL_PATH, { name: EVENT_THUMBNAIL_FILE_NAME });
-}
-
-function parseMessageUrl(input: string): { guildId: string; channelId: string; messageId: string } | null {
-  const match = input.match(/discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
-  if (!match) {
-    return null;
-  }
-  return { guildId: match[1], channelId: match[2], messageId: match[3] };
 }
 
 export function parseResultMessage(content: string): ParsedResultMessage | null {
@@ -201,28 +171,6 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
   return { title, candidates, pollId };
 }
 
-async function fetchSourceMessageByUrl(interaction: CreateEventInteraction, messageUrl: string): Promise<Message<true>> {
-  const parsed = parseMessageUrl(messageUrl);
-  if (!parsed || parsed.guildId !== interaction.guildId) {
-    throw new Error("メッセージURLを読み取れません。同じサーバーの結果メッセージURLを指定してください。");
-  }
-
-  const channel = await interaction.client.channels.fetch(parsed.channelId).catch(() => null);
-  if (!isGuildTextChannel(channel)) {
-    throw new Error("指定されたメッセージのチャンネルを確認できません。");
-  }
-
-  const message = await channel.messages.fetch(parsed.messageId).catch(() => null);
-  if (!message?.inGuild()) {
-    throw new Error("指定された結果メッセージが見つかりません。");
-  }
-  if (!message.author.bot) {
-    throw new Error("指定されたメッセージは、このBotが投稿した日程調整結果ではありません。");
-  }
-
-  return message;
-}
-
 async function findLatestResultMessage(channel: GuildTextBasedChannel): Promise<Message<true> | null> {
   const messages = await channel.messages.fetch({ limit: 100 });
   for (const message of messages.values()) {
@@ -236,18 +184,14 @@ async function findLatestResultMessage(channel: GuildTextBasedChannel): Promise<
   return null;
 }
 
-async function resolveSourceMessage(interaction: CreateEventInteraction, messageUrl: string | null): Promise<Message<true>> {
-  if (messageUrl) {
-    return fetchSourceMessageByUrl(interaction, messageUrl);
-  }
-
+async function resolveSourceMessage(interaction: CreateEventInteraction): Promise<Message<true>> {
   if (!isGuildTextChannel(interaction.channel)) {
     throw new Error("サーバー内のテキストチャンネルで実行してください。");
   }
 
   const message = await findLatestResultMessage(interaction.channel);
   if (!message) {
-    throw new Error("対象の日程調整結果が見つかりません。メッセージURLを指定して再度実行してください。");
+    throw new Error("対象の日程調整結果が見つかりません。結果メッセージと同じチャンネルで実行してください。");
   }
   return message;
 }
@@ -279,12 +223,11 @@ function assertCreateEventPermissions(interaction: CreateEventInteraction): void
 }
 
 function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">, candidate: EventCandidate): EmbedBuilder {
-  const venueUrl = resolveVenueUrl(state.location, state.venueUrl);
-  const staticMapUrl = buildStaticMapUrl(state.location);
+  const staticMapUrl = buildStaticMapUrl(state.address);
   const embed = new EmbedBuilder()
     .setColor(0xe33555)
     .setTitle(state.title)
-    .setDescription(buildEventInfoDescription(state, candidate, venueUrl))
+    .setDescription(buildEventInfoDescription(state, candidate))
     .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
     .setFooter({ text: "開催情報をご確認ください。" });
 
@@ -411,7 +354,7 @@ function buildCreateEventModal(): ModalBuilder {
             .setMaxLength(12)
         ),
       new LabelBuilder()
-        .setLabel("現地参加人数")
+        .setLabel("参加人数")
         .setTextInputComponent(
           new TextInputBuilder()
             .setCustomId("event_attendees")
@@ -421,34 +364,34 @@ function buildCreateEventModal(): ModalBuilder {
             .setMaxLength(6)
         ),
       new LabelBuilder()
-        .setLabel("開催場所")
-        .setDescription("会場名、住所、または会場URLを入力してください。")
+        .setLabel("開催場所（住所）")
+        .setDescription("入力した場合だけGoogle Mapsと地図を表示します。")
         .setTextInputComponent(
           new TextInputBuilder()
-            .setCustomId("event_location")
+            .setCustomId("event_address")
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
             .setMaxLength(500)
         ),
       new LabelBuilder()
-        .setLabel("会場URL（任意）")
-        .setDescription("開催場所にURLを入力した場合は省略できます。")
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId("event_venue_url")
-            .setStyle(TextInputStyle.Short)
+        .setLabel("開催場所（チャンネル）")
+        .setDescription("Discord内の開催チャンネルを選択してください。")
+        .setChannelSelectMenuComponent(
+          new ChannelSelectMenuBuilder()
+            .setCustomId("event_channel")
+            .setChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice)
             .setRequired(false)
-            .setMaxLength(500)
+            .setMinValues(0)
+            .setMaxValues(1)
         ),
       new LabelBuilder()
-        .setLabel("結果メッセージURL（任意）")
-        .setDescription("省略時は現在のチャンネルから自動検出します。")
+        .setLabel("自由入力メッセージ")
         .setTextInputComponent(
           new TextInputBuilder()
-            .setCustomId("event_message_url")
-            .setStyle(TextInputStyle.Short)
+            .setCustomId("event_custom_message")
+            .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
-            .setMaxLength(200)
+            .setMaxLength(1000)
         )
     );
 }
@@ -475,11 +418,15 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
   assertCreateEventPermissions(interaction);
 
   const price = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
-  const attendees = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "現地参加人数", 1);
-  const location = interaction.fields.getTextInputValue("event_location").trim() || null;
-  const venueUrl = interaction.fields.getTextInputValue("event_venue_url").trim() || null;
-  const messageUrl = interaction.fields.getTextInputValue("event_message_url").trim() || null;
-  if (price === null && attendees === null && !location && !venueUrl && !messageUrl) {
+  const attendees = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "参加人数", 1);
+  const address = interaction.fields.getTextInputValue("event_address").trim() || null;
+  const eventChannelId = interaction.fields.getSelectedChannels(
+    "event_channel",
+    false,
+    [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice]
+  )?.first()?.id ?? null;
+  const customMessage = interaction.fields.getTextInputValue("event_custom_message").trim() || null;
+  if (price === null && attendees === null && !address && !eventChannelId && !customMessage) {
     await interaction.reply({
       content: "開催情報を1項目以上入力してください。",
       flags: MessageFlags.Ephemeral
@@ -489,7 +436,7 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const sourceMessage = await resolveSourceMessage(interaction, messageUrl);
+    const sourceMessage = await resolveSourceMessage(interaction);
     const parsed = parseResultMessage(sourceMessage.content);
     if (!parsed) {
       await interaction.editReply("日程調整結果を解析できません。対象メッセージを確認してください。");
@@ -502,8 +449,9 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
       title: parsed.title,
       price,
       attendees,
-      location,
-      venueUrl,
+      address,
+      eventChannelId,
+      customMessage,
       fee,
       pollId: parsed.pollId
     };
