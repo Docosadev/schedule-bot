@@ -88,8 +88,9 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
 }
 
 export async function buildVoterList(poll: PollWithOptions): Promise<string> {
+  const personal = (await getGuildSettings(poll.guildId)).messageStyle === "personal";
   if (poll.anonymous) {
-    return "このアンケートは匿名表示モード！投票者一覧はヒミツだよん！";
+    return personal ? "このアンケートは匿名表示モード！投票者一覧はヒミツだよん！" : "この日程調整は匿名表示です。投票者一覧は表示できません。";
   }
 
   const votes = await getVotesForPoll(poll.id);
@@ -115,11 +116,12 @@ export async function buildVoterList(poll: PollWithOptions): Promise<string> {
     ].join("\n");
   });
 
-  return [`投票者一覧をドドンと公開！: ${poll.title}`, "", ...lines].join("\n\n");
+  return [personal ? `投票者一覧をドドンと公開！: ${poll.title}` : `投票者一覧: ${poll.title}`, "", ...lines].join("\n\n");
 }
 
 export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
   const breakdown = await getVoteBreakdown(poll.id);
+  const personal = (await getGuildSettings(poll.guildId)).messageStyle === "personal";
   const reminders = parseReminderMinutesJson(poll.reminderMinutes)
     .map(formatReminderMinutes)
     .join(", ");
@@ -128,7 +130,7 @@ export async function buildPollSummary(poll: PollWithOptions): Promise<string> {
     return `${option.position}. ${option.label} - ${VOTE_LABELS.yes} ${VOTE_MEANINGS.yes} ${counts.yes} / ${VOTE_LABELS.no} ${VOTE_MEANINGS.no} ${counts.no} / ${VOTE_LABELS.maybe} ${VOTE_MEANINGS.maybe} ${counts.maybe}`;
   });
   return [
-    `日程調整をチェック！: ${poll.title}`,
+    personal ? `日程調整をチェック！: ${poll.title}` : `日程調整: ${poll.title}`,
     `締切: ${formatDeadline(poll.deadline, poll.timezone)}`,
     `リマインド: ${reminders}`,
     `状態: ${poll.status}`,

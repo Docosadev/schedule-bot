@@ -112,11 +112,6 @@ export const scheduleSettingsCommand = new SlashCommandBuilder()
       .addStringOption((option) => option.setName("value").setDescription("例: Asia/Tokyo").setRequired(true).setMaxLength(64))
   )
   .addSubcommand((subcommand) =>
-    subcommand.setName("style").setDescription("メッセージスタイルを変更します")
-      .addStringOption((option) => option.setName("value").setDescription("スタイル").setRequired(true)
-        .addChoices({ name: "標準", value: "standard" }, { name: "個人", value: "personal" }))
-  )
-  .addSubcommand((subcommand) =>
     subcommand.setName("notify-role").setDescription("通知の初期ロールを変更します")
       .addStringOption((option) => option.setName("timing").setDescription("通知タイミング").setRequired(true)
         .addChoices(
@@ -128,13 +123,24 @@ export const scheduleSettingsCommand = new SlashCommandBuilder()
       .addRoleOption((option) => option.setName("role").setDescription("省略するとメンションなし").setRequired(false))
   )
   .addSubcommand((subcommand) =>
-    subcommand.setName("pokemon-watcher").setDescription("個人用の商品監視を設定します")
-      .addBooleanOption((option) => option.setName("enabled").setDescription("有効にするか").setRequired(true))
-      .addChannelOption((option) => option.setName("channel").setDescription("通知先").addChannelTypes(ChannelType.GuildText))
-  )
-  .addSubcommand((subcommand) =>
     subcommand.setName("delete-data").setDescription("このサーバーの保存データを削除します")
       .addStringOption((option) => option.setName("confirm").setDescription("確認のため DELETE と入力").setRequired(true))
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
+export const personalSettingsCommand = new SlashCommandBuilder()
+  .setName("schedule-personal")
+  .setDescription("個人サーバー専用の設定を管理します")
+  .addSubcommand((subcommand) => subcommand.setName("show").setDescription("個人用設定を表示します"))
+  .addSubcommand((subcommand) =>
+    subcommand.setName("style").setDescription("メッセージスタイルを変更します")
+      .addStringOption((option) => option.setName("value").setDescription("スタイル").setRequired(true)
+        .addChoices({ name: "標準", value: "standard" }, { name: "個人", value: "personal" }))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("pokemon-watcher").setDescription("ポケモン商品監視を設定します")
+      .addBooleanOption((option) => option.setName("enabled").setDescription("有効にするか").setRequired(true))
+      .addChannelOption((option) => option.setName("channel").setDescription("通知先").addChannelTypes(ChannelType.GuildText))
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
@@ -144,10 +150,11 @@ export const commands = [
   createEventCommand.toJSON(),
   scheduleSettingsCommand.toJSON()
 ];
+export const personalCommands = [personalSettingsCommand.toJSON()];
 
 export async function handleScheduleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId || !interaction.channelId) {
-    await interaction.reply({ content: "このコマンドはサーバー内のテキストチャンネルで使ってねー！", ephemeral: true });
+    await interaction.reply({ content: "このコマンドはサーバー内のテキストチャンネルで実行してください。", ephemeral: true });
     return;
   }
 
@@ -160,7 +167,7 @@ export async function handleScheduleCommand(interaction: ChatInputCommandInterac
   url.searchParams.set("token", session.token);
 
   await interaction.reply({
-    content: `日程調整スタート！この作成画面からアンケートを作ってねー！\n${url.toString()}\n\nリンクの有効時間は30分！完成したアンケートは新しいスレッドに投稿されるぞよ！`,
+    content: `以下の作成画面から日程調整を作成してください。\n${url.toString()}\n\nリンクの有効時間は30分です。作成した日程調整は新しいスレッドに投稿されます。`,
     ephemeral: true
   });
 }
@@ -171,7 +178,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
   if (subcommand === "list") {
     const polls = (await getOpenPolls()).filter((poll) => poll.guildId === interaction.guildId);
     if (polls.length === 0) {
-      await interaction.reply({ content: "受付中のアンケートは今のところゼロだぞー！", ephemeral: true });
+      await interaction.reply({ content: "受付中の日程調整はありません。", ephemeral: true });
       return;
     }
     await interaction.reply({
@@ -185,7 +192,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
     const pollId = interaction.options.getString("poll_id", true);
     const poll = interaction.guildId ? await getPollForGuild(pollId, interaction.guildId) : null;
     if (!poll) {
-      await interaction.reply({ content: "指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！", ephemeral: true });
+      await interaction.reply({ content: "指定された日程調整が見つかりません。IDを確認してください。", ephemeral: true });
       return;
     }
     await interaction.reply({ content: await buildPollSummary(poll), embeds: [await buildPollEmbed(poll)], ephemeral: true });
@@ -196,7 +203,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
     const pollId = interaction.options.getString("poll_id", true);
     const poll = interaction.guildId ? await getPollForGuild(pollId, interaction.guildId) : null;
     if (!poll) {
-      await interaction.reply({ content: "指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！", ephemeral: true });
+      await interaction.reply({ content: "指定された日程調整が見つかりません。IDを確認してください。", ephemeral: true });
       return;
     }
     await interaction.reply({ content: await buildVoterList(poll), allowedMentions: { parse: [] }, ephemeral: true });
@@ -238,12 +245,10 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
     await interaction.reply({
       content: [
         `タイムゾーン: ${settings.timezone}`,
-        `メッセージスタイル: ${settings.messageStyle}`,
         `初回通知: ${settings.defaultInitialNotifyRoleId ? `<@&${settings.defaultInitialNotifyRoleId}>` : "なし"}`,
         `リマインド通知: ${settings.defaultReminderNotifyRoleId ? `<@&${settings.defaultReminderNotifyRoleId}>` : "なし"}`,
         `結果通知: ${settings.defaultResultNotifyRoleId ? `<@&${settings.defaultResultNotifyRoleId}>` : "なし"}`,
-        `開催情報通知: ${settings.defaultEventNotifyRoleId ? `<@&${settings.defaultEventNotifyRoleId}>` : "なし"}`,
-        `個人用商品監視: ${settings.pokemonWatcherEnabled ? "ON" : "OFF"}`
+        `開催情報通知: ${settings.defaultEventNotifyRoleId ? `<@&${settings.defaultEventNotifyRoleId}>` : "なし"}`
       ].join("\n"),
       allowedMentions: { parse: [] },
       ephemeral: true
@@ -259,13 +264,6 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
       return;
     }
     settings.timezone = timezone;
-  } else if (subcommand === "style") {
-    const style = interaction.options.getString("value", true) as "standard" | "personal";
-    if (style === "personal" && interaction.guildId !== config.personalGuildId) {
-      await interaction.reply({ content: "個人スタイルは許可された個人サーバーでのみ有効にできます。", ephemeral: true });
-      return;
-    }
-    settings.messageStyle = style;
   } else if (subcommand === "notify-role") {
     const timing = interaction.options.getString("timing", true);
     const role = interaction.options.getRole("role");
@@ -277,19 +275,6 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
     if (timing === "reminder") settings.defaultReminderNotifyRoleId = role?.id ?? null;
     if (timing === "result") settings.defaultResultNotifyRoleId = role?.id ?? null;
     if (timing === "event") settings.defaultEventNotifyRoleId = role?.id ?? null;
-  } else if (subcommand === "pokemon-watcher") {
-    if (interaction.guildId !== config.personalGuildId) {
-      await interaction.reply({ content: "商品監視は許可された個人サーバーでのみ設定できます。", ephemeral: true });
-      return;
-    }
-    const enabled = interaction.options.getBoolean("enabled", true);
-    const channel = interaction.options.getChannel("channel");
-    if (enabled && !channel) {
-      await interaction.reply({ content: "有効にする場合は通知先チャンネルを指定してください。", ephemeral: true });
-      return;
-    }
-    settings.pokemonWatcherEnabled = enabled;
-    settings.pokemonNotifyChannelId = enabled ? channel!.id : null;
   } else if (subcommand === "delete-data") {
     if (interaction.options.getString("confirm", true) !== "DELETE") {
       await interaction.reply({ content: "削除を確定するには `DELETE` と正確に入力してください。", ephemeral: true });
@@ -305,4 +290,47 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
   settings.updatedAt = new Date().toISOString();
   await saveGuildSettings(settings);
   await interaction.reply({ content: "サーバー設定を更新しました。", ephemeral: true });
+}
+
+export async function handlePersonalSettingsCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!interaction.guildId || interaction.guildId !== config.personalGuildId) {
+    await interaction.reply({ content: "このコマンドは個人サーバーでのみ実行できます。", ephemeral: true });
+    return;
+  }
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "この設定はサーバー管理権限を持つユーザーのみ変更できます。", ephemeral: true });
+    return;
+  }
+
+  const settings = await getGuildSettings(interaction.guildId);
+  const subcommand = interaction.options.getSubcommand();
+  if (subcommand === "show") {
+    await interaction.reply({
+      content: [
+        `メッセージスタイル: ${settings.messageStyle}`,
+        `ポケモン商品監視: ${settings.pokemonWatcherEnabled ? "ON" : "OFF"}`,
+        `商品通知チャンネル: ${settings.pokemonNotifyChannelId ? `<#${settings.pokemonNotifyChannelId}>` : "なし"}`
+      ].join("\n"),
+      allowedMentions: { parse: [] },
+      ephemeral: true
+    });
+    return;
+  }
+
+  if (subcommand === "style") {
+    settings.messageStyle = interaction.options.getString("value", true) as "standard" | "personal";
+  } else if (subcommand === "pokemon-watcher") {
+    const enabled = interaction.options.getBoolean("enabled", true);
+    const channel = interaction.options.getChannel("channel");
+    if (enabled && !channel) {
+      await interaction.reply({ content: "有効にする場合は通知先チャンネルを指定してください。", ephemeral: true });
+      return;
+    }
+    settings.pokemonWatcherEnabled = enabled;
+    settings.pokemonNotifyChannelId = enabled ? channel!.id : null;
+  }
+
+  settings.updatedAt = new Date().toISOString();
+  await saveGuildSettings(settings);
+  await interaction.reply({ content: "個人サーバー設定を更新しました。", ephemeral: true });
 }

@@ -602,18 +602,18 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   const pollId = interaction.options.getString("poll_id", true);
   const poll = await getPoll(pollId);
   if (!poll) {
-    await interaction.editReply("指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！");
+    await interaction.editReply("指定された日程調整が見つかりません。IDを確認してください。");
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.editReply("このアンケートを操作する権限がないぞよ！");
+    await interaction.editReply("この日程調整を操作する権限がありません。");
     return;
   }
 
   if (cancelled) {
     await closePoll(poll.id, "cancelled");
     requestPollScheduleRefresh();
-    await interaction.editReply("アンケートをキャンセルしておいたぞ。");
+    await interaction.editReply("日程調整をキャンセルしました。");
     return;
   }
 
@@ -626,7 +626,7 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   const resultRole = resultRoleId ? await pollChannel?.guild.roles.fetch(resultRoleId).catch(() => null) : null;
   const docosaMention = config.personalGuildId === closedPoll.guildId ? await resolveDocosaMention(interaction.guild) : "";
   if (!pollChannel) {
-    await interaction.editReply("アンケートは締め切ったけど、結果を投稿するチャンネルが見つからなかったぞよ！");
+    await interaction.editReply("日程調整を締め切りましたが、結果の投稿先チャンネルが見つかりません。");
     return;
   }
 
@@ -636,7 +636,7 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
     files: matrixAttachment ? [matrixAttachment] : [],
     allowedMentions: resultRole ? { parse: [], roles: [resultRole.id] } : { parse: [] }
   });
-  await interaction.editReply("アンケートを締め切って、結果を投稿しておいたぞ。");
+  await interaction.editReply("日程調整を締め切り、結果を投稿しました。");
 }
 
 export async function extendPollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -646,39 +646,39 @@ export async function extendPollByCommand(interaction: ChatInputCommandInteracti
   const deadline = poll ? parseLocalDateTime(deadlineInput, poll.timezone) : null;
 
   if (!poll || !deadline) {
-    await interaction.reply({ content: "アンケートか締切日時を確認できなかったぞー！入力をもう一度チェックしてね！", ephemeral: true });
+    await interaction.reply({ content: "日程調整または締切日時を確認できません。入力内容を確認してください。", ephemeral: true });
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.reply({ content: "このアンケートを操作する権限がないぞよ！", ephemeral: true });
+    await interaction.reply({ content: "この日程調整を操作する権限がありません。", ephemeral: true });
     return;
   }
 
   await extendPoll(pollId, deadline.toISOString());
   requestPollScheduleRefresh();
-  await interaction.reply(`締切を延ばしておいたぞ: ${formatDeadline(deadline.toISOString(), poll.timezone)}`);
+  await interaction.reply(`締切を延長しました: ${formatDeadline(deadline.toISOString(), poll.timezone)}`);
 }
 
 export async function deletePollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   const pollId = interaction.options.getString("poll_id", true);
   const poll = await getPoll(pollId);
   if (!poll) {
-    await interaction.reply({ content: "指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！", ephemeral: true });
+    await interaction.reply({ content: "指定された日程調整が見つかりません。IDを確認してください。", ephemeral: true });
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.reply({ content: "このアンケートを操作する権限がないぞよ！", ephemeral: true });
+    await interaction.reply({ content: "この日程調整を操作する権限がありません。", ephemeral: true });
     return;
   }
 
-  await interaction.reply({ content: "アンケートをお片付け中！ちょこっと待ってねー！", ephemeral: true });
+  await interaction.reply({ content: "日程調整を削除しています。しばらくお待ちください。", ephemeral: true });
 
   const pollChannel = await fetchPollChannel(interaction, poll);
   const deletedMessages = pollChannel ? await deletePollMessages(pollChannel, poll) : 0;
 
   await deletePoll(pollId);
   requestPollScheduleRefresh();
-  await interaction.editReply(`アンケートを削除したぞよ！関連メッセージ/スレッドも ${deletedMessages} 件お片付け完了！`);
+  await interaction.editReply(`日程調整を削除しました。関連するメッセージまたはスレッドの削除数: ${deletedMessages}件`);
 }
 
 export function canManagePoll(interaction: ChatInputCommandInteraction, poll: PollWithOptions): boolean {

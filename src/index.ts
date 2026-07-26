@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import {
   handleCreateEventSlashCommand,
+  handlePersonalSettingsCommand,
   handleScheduleAdminCommand,
   handleScheduleCommand,
   handleScheduleSettingsCommand
@@ -71,9 +72,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     if (interaction.commandName === "schedule-settings") {
       await handleScheduleSettingsCommand(interaction);
+      return;
+    }
+    if (interaction.commandName === "schedule-personal") {
+      await handlePersonalSettingsCommand(interaction);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "むむっ！？予期せぬエラーが発生したぞよ！";
+    const message = error instanceof Error ? error.message : "予期しないエラーが発生しました。時間をおいて再度実行してください。";
     try {
       if (!interaction.isRepliable()) {
         console.error("interaction is not repliable", error);

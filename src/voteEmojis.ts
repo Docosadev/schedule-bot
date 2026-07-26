@@ -15,7 +15,7 @@ export const VOTE_LABELS: Record<VoteStatus, string> = {
 export const VOTE_MEANINGS: Record<VoteStatus, string> = {
   yes: "参加",
   no: "不参加",
-  maybe: "未定（行けたら行く）"
+  maybe: "未定"
 };
 
 export function formatVoteDefinitions(withEmoji = false): string {
