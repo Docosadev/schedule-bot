@@ -38,11 +38,11 @@ type PendingEventCreation = {
   userId: string;
   title: string;
   candidates: EventCandidate[];
-  price: number;
-  attendees: number;
-  location: string;
+  price: number | null;
+  attendees: number | null;
+  location: string | null;
   venueUrl: string | null;
-  fee: number;
+  fee: number | null;
   pollId: string | null;
   createdAt: number;
 };
@@ -68,7 +68,10 @@ function isProbablyUrl(value: string): boolean {
   return /^https?:\/\//i.test(value.trim());
 }
 
-function buildLocationValue(location: string, venueUrl: string | null): string {
+function buildLocationValue(location: string | null, venueUrl: string | null): string | null {
+  if (!location) {
+    return venueUrl;
+  }
   if (!venueUrl || venueUrl === location) {
     return location;
   }
@@ -80,12 +83,21 @@ function buildEventInfoDescription(
   candidate: EventCandidate,
   venueUrl: string | null
 ): string {
-  return [
-    `**🗓️ 開催日時**\n${candidate.label}`,
-    `**💰 今回の参加費**\n${formatYen(state.fee)}円`,
-    `**🧾 利用総額 / 現地参加**\n${formatYen(state.price)}円 / ${state.attendees}人`,
-    `**📍 開催場所**\n${buildLocationValue(state.location, venueUrl)}`
-  ].join("\n\n");
+  const sections = [`**🗓️ 開催日時**\n${candidate.label}`];
+  if (state.fee !== null) {
+    sections.push(`**💰 今回の参加費**\n${formatYen(state.fee)}円`);
+  }
+  if (state.price !== null) {
+    sections.push(`**🧾 利用総額**\n${formatYen(state.price)}円`);
+  }
+  if (state.attendees !== null) {
+    sections.push(`**👥 現地参加人数**\n${state.attendees}人`);
+  }
+  const locationValue = buildLocationValue(state.location, venueUrl);
+  if (locationValue) {
+    sections.push(`**📍 開催場所**\n${locationValue}`);
+  }
+  return sections.join("\n\n");
 }
 
 function buildGoogleMapsSearchUrl(location: string): string | null {
@@ -95,9 +107,12 @@ function buildGoogleMapsSearchUrl(location: string): string | null {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 }
 
-function resolveVenueUrl(location: string, venueUrl: string | null): string | null {
+function resolveVenueUrl(location: string | null, venueUrl: string | null): string | null {
   if (venueUrl) {
     return venueUrl;
+  }
+  if (!location) {
+    return null;
   }
   if (isProbablyUrl(location)) {
     return location;
@@ -105,8 +120,8 @@ function resolveVenueUrl(location: string, venueUrl: string | null): string | nu
   return buildGoogleMapsSearchUrl(location);
 }
 
-function buildStaticMapUrl(location: string): string | null {
-  if (!config.googleMapsApiKey || isProbablyUrl(location)) {
+function buildStaticMapUrl(location: string | null): string | null {
+  if (!location || !config.googleMapsApiKey || isProbablyUrl(location)) {
     return null;
   }
 
@@ -397,7 +412,7 @@ function buildCreateEventModal(): ModalBuilder {
             .setCustomId("event_price")
             .setStyle(TextInputStyle.Short)
             .setPlaceholder("例: 10000")
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(12)
         ),
       new LabelBuilder()
@@ -407,7 +422,7 @@ function buildCreateEventModal(): ModalBuilder {
             .setCustomId("event_attendees")
             .setStyle(TextInputStyle.Short)
             .setPlaceholder("例: 5")
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(6)
         ),
       new LabelBuilder()
@@ -417,7 +432,7 @@ function buildCreateEventModal(): ModalBuilder {
           new TextInputBuilder()
             .setCustomId("event_location")
             .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
+            .setRequired(false)
             .setMaxLength(500)
         ),
       new LabelBuilder()
@@ -443,8 +458,11 @@ function buildCreateEventModal(): ModalBuilder {
     );
 }
 
-function parseIntegerInput(value: string, label: string, minimum: number): number {
+function parseOptionalIntegerInput(value: string, label: string, minimum: number): number | null {
   const normalized = value.trim().replace(/[,\s]/g, "");
+  if (!normalized) {
+    return null;
+  }
   if (!/^\d+$/.test(normalized)) {
     throw new Error(`${label}は半角数字で入力してください。`);
   }
@@ -461,13 +479,16 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
   }
   assertCreateEventPermissions(interaction);
 
-  const price = parseIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
-  const attendees = parseIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "現地参加人数", 1);
-  const location = interaction.fields.getTextInputValue("event_location").trim();
+  const price = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
+  const attendees = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "現地参加人数", 1);
+  const location = interaction.fields.getTextInputValue("event_location").trim() || null;
   const venueUrl = interaction.fields.getTextInputValue("event_venue_url").trim() || null;
   const messageUrl = interaction.fields.getTextInputValue("event_message_url").trim() || null;
-  if (!location) {
-    await interaction.reply({ content: "開催場所を入力してください。", flags: MessageFlags.Ephemeral });
+  if (price === null && attendees === null && !location && !venueUrl && !messageUrl) {
+    await interaction.reply({
+      content: "開催情報を1項目以上入力してください。",
+      flags: MessageFlags.Ephemeral
+    });
     return;
   }
 
@@ -480,7 +501,7 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
       return;
     }
 
-    const fee = Math.ceil(price / attendees);
+    const fee = price !== null && attendees !== null ? Math.ceil(price / attendees) : null;
     const baseState = {
       userId: interaction.user.id,
       title: parsed.title,
