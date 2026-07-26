@@ -10,7 +10,9 @@ import {
   handlePersonalSettingsCommand,
   handleScheduleAdminCommand,
   handleScheduleCommand,
-  handleScheduleSettingsCommand
+  handleScheduleSettingsCommand,
+  handleTimezoneSettingsModal,
+  TIMEZONE_SETTINGS_MODAL_ID
 } from "./commands.js";
 import { config } from "./config.js";
 import { getGuildSettings, hasGuildSettings, migrate, saveGuildSettings } from "./db.js";
@@ -52,6 +54,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isModalSubmit()) {
       if (interaction.customId === CREATE_EVENT_MODAL_ID) {
         await handleCreateEventModal(interaction);
+        return;
+      }
+      if (interaction.customId === TIMEZONE_SETTINGS_MODAL_ID) {
+        await handleTimezoneSettingsModal(interaction);
         return;
       }
     }

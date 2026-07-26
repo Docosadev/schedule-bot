@@ -1,9 +1,14 @@
 import {
   ChatInputCommandInteraction,
   ChannelType,
+  LabelBuilder,
+  MessageFlags,
+  ModalBuilder,
+  ModalSubmitInteraction,
   PermissionFlagsBits,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  StringSelectMenuBuilder
 } from "discord.js";
 import { config } from "./config.js";
 import { deleteGuildData, getGuildSettings, getOpenPolls, getPollForGuild, saveGuildSettings } from "./db.js";
@@ -72,10 +77,8 @@ export const createEventCommand = new SlashCommandBuilder()
 export const scheduleSettingsCommand = new SlashCommandBuilder()
   .setName("schedule-settings")
   .setDescription("このサーバーの日程調整設定を管理します")
-  .addSubcommand((subcommand) => subcommand.setName("show").setDescription("現在の設定を表示します"))
   .addSubcommand((subcommand) =>
-    subcommand.setName("timezone").setDescription("タイムゾーンを変更します")
-      .addStringOption((option) => option.setName("value").setDescription("例: Asia/Tokyo").setRequired(true).setMaxLength(64))
+    subcommand.setName("timezone").setDescription("タイムゾーンを選択します")
   )
   .addSubcommand((subcommand) =>
     subcommand.setName("delete-data").setDescription("このサーバーの保存データを削除します")
@@ -118,6 +121,27 @@ export const commands = [
   scheduleSettingsCommand.toJSON()
 ];
 export const personalCommands = [personalSettingsCommand.toJSON()];
+
+export const TIMEZONE_SETTINGS_MODAL_ID = "schedule_settings_timezone";
+const TIMEZONE_SELECT_ID = "timezone_value";
+const TIMEZONE_CHOICES = [
+  { label: "日本標準時", description: "東京", value: "Asia/Tokyo" },
+  { label: "協定世界時", description: "UTC", value: "UTC" },
+  { label: "韓国標準時", description: "ソウル", value: "Asia/Seoul" },
+  { label: "中国標準時", description: "上海", value: "Asia/Shanghai" },
+  { label: "香港時間", description: "香港", value: "Asia/Hong_Kong" },
+  { label: "台湾標準時", description: "台北", value: "Asia/Taipei" },
+  { label: "シンガポール時間", description: "シンガポール", value: "Asia/Singapore" },
+  { label: "オーストラリア東部時間", description: "シドニー", value: "Australia/Sydney" },
+  { label: "英国時間", description: "ロンドン", value: "Europe/London" },
+  { label: "中央ヨーロッパ時間", description: "パリ", value: "Europe/Paris" },
+  { label: "米国東部時間", description: "ニューヨーク", value: "America/New_York" },
+  { label: "米国中部時間", description: "シカゴ", value: "America/Chicago" },
+  { label: "米国山岳部時間", description: "デンバー", value: "America/Denver" },
+  { label: "米国太平洋時間", description: "ロサンゼルス", value: "America/Los_Angeles" },
+  { label: "ハワイ時間", description: "ホノルル", value: "Pacific/Honolulu" },
+  { label: "ニュージーランド時間", description: "オークランド", value: "Pacific/Auckland" }
+] as const;
 
 export async function handleScheduleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId || !interaction.channelId) {
@@ -207,24 +231,26 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
     return;
   }
   const subcommand = interaction.options.getSubcommand();
-  const settings = await getGuildSettings(interaction.guildId);
-  if (subcommand === "show") {
-    await interaction.reply({
-      content: `タイムゾーン: ${settings.timezone}`,
-      ephemeral: true
-    });
+  if (subcommand === "timezone") {
+    const modal = new ModalBuilder()
+      .setCustomId(TIMEZONE_SETTINGS_MODAL_ID)
+      .setTitle("タイムゾーン設定")
+      .addLabelComponents(
+        new LabelBuilder()
+          .setLabel("タイムゾーン")
+          .setDescription("日程と締切の表示に使用する地域を選択してください。")
+          .setStringSelectMenuComponent(
+            new StringSelectMenuBuilder()
+              .setCustomId(TIMEZONE_SELECT_ID)
+              .setPlaceholder("タイムゾーンを選択")
+              .setRequired(true)
+              .addOptions(...TIMEZONE_CHOICES)
+          )
+      );
+    await interaction.showModal(modal);
     return;
   }
-  if (subcommand === "timezone") {
-    const timezone = interaction.options.getString("value", true).trim();
-    try {
-      new Intl.DateTimeFormat("ja-JP", { timeZone: timezone }).format();
-    } catch {
-      await interaction.reply({ content: "有効なIANAタイムゾーンを指定してください（例: Asia/Tokyo）。", ephemeral: true });
-      return;
-    }
-    settings.timezone = timezone;
-  } else if (subcommand === "delete-data") {
+  if (subcommand === "delete-data") {
     if (interaction.options.getString("confirm", true) !== "DELETE") {
       await interaction.reply({ content: "削除を確定するには `DELETE` と正確に入力してください。", ephemeral: true });
       return;
@@ -236,9 +262,39 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
     });
     return;
   }
+}
+
+export async function handleTimezoneSettingsModal(interaction: ModalSubmitInteraction): Promise<void> {
+  if (
+    interaction.customId !== TIMEZONE_SETTINGS_MODAL_ID ||
+    !interaction.guildId ||
+    !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
+  ) {
+    await interaction.reply({
+      content: "この設定はサーバー管理権限を持つユーザーのみ変更できます。",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const timezone = interaction.fields.getStringSelectValues(TIMEZONE_SELECT_ID)[0];
+  const choice = TIMEZONE_CHOICES.find((item) => item.value === timezone);
+  if (!choice) {
+    await interaction.reply({
+      content: "選択されたタイムゾーンを確認できません。もう一度実行してください。",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const settings = await getGuildSettings(interaction.guildId);
+  settings.timezone = choice.value;
   settings.updatedAt = new Date().toISOString();
   await saveGuildSettings(settings);
-  await interaction.reply({ content: "サーバー設定を更新しました。", ephemeral: true });
+  await interaction.reply({
+    content: `タイムゾーンを「${choice.label}（${choice.value}）」に設定しました。`,
+    flags: MessageFlags.Ephemeral
+  });
 }
 
 export async function handlePersonalSettingsCommand(interaction: ChatInputCommandInteraction): Promise<void> {
