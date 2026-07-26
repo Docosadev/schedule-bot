@@ -3,7 +3,7 @@ import { ja } from "date-fns/locale";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { config } from "./config.js";
 
-export function parseLocalDateTime(input: string): Date | null {
+export function parseLocalDateTime(input: string, timezone = config.timezone): Date | null {
   const trimmed = input.trim();
   const patterns = [
     "yyyy-MM-dd HH:mm",
@@ -21,7 +21,7 @@ export function parseLocalDateTime(input: string): Date | null {
   for (const pattern of patterns) {
     const parsed = parse(trimmed, pattern, new Date());
     if (isValid(parsed)) {
-      return fromZonedTime(parsed, config.timezone);
+      return fromZonedTime(parsed, timezone);
     }
   }
 
@@ -29,23 +29,23 @@ export function parseLocalDateTime(input: string): Date | null {
   return isValid(fallback) ? fallback : null;
 }
 
-export function parseDateList(input: string): Date[] {
+export function parseDateList(input: string, timezone = config.timezone): Date[] {
   return input
     .split(/[,、\n]/)
-    .map((item) => parseLocalDateTime(item))
+    .map((item) => parseLocalDateTime(item, timezone))
     .filter((item): item is Date => item !== null)
     .sort((a, b) => a.getTime() - b.getTime());
 }
 
-export function formatLocalDateTime(date: Date): string {
-  const zoned = toZonedTime(date, config.timezone);
+export function formatLocalDateTime(date: Date, timezone = config.timezone): string {
+  const zoned = toZonedTime(date, timezone);
   return format(zoned, "yyyy-MM-dd(E) HH:mm", { locale: ja });
 }
 
-export function formatOptionLabel(date: Date): string {
-  return formatLocalDateTime(date);
+export function formatOptionLabel(date: Date, timezone = config.timezone): string {
+  return formatLocalDateTime(date, timezone);
 }
 
-export function formatDeadline(iso: string): string {
-  return formatLocalDateTime(new Date(iso));
+export function formatDeadline(iso: string, timezone = config.timezone): string {
+  return formatLocalDateTime(new Date(iso), timezone);
 }

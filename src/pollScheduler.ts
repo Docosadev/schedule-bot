@@ -1,5 +1,6 @@
 import type { Client } from "discord.js";
-import { getOpenPolls } from "./db.js";
+import { cleanupExpiredData, getOpenPolls } from "./db.js";
+import { config } from "./config.js";
 import { checkDuePolls, checkReminders } from "./pollService.js";
 import { parseReminderMinutesJson } from "./reminders.js";
 import { registerPollScheduleRefresh } from "./schedulerHooks.js";
@@ -19,12 +20,22 @@ let channelsFetch: ((channelId: string) => Promise<unknown>) | null = null;
 export async function startPollScheduler(client: Client): Promise<void> {
   channelsFetch = (channelId) => client.channels.fetch(channelId);
   registerPollScheduleRefresh(queuePollScheduleRefresh);
+  await runDataCleanup();
   await refreshPollSchedule();
 
   reconciliationTimer = setInterval(() => {
+    void runDataCleanup();
     queuePollScheduleRefresh();
   }, RECONCILIATION_INTERVAL_MS);
   reconciliationTimer.unref();
+}
+
+async function runDataCleanup(): Promise<void> {
+  const closedBefore = new Date(Date.now() - config.closedPollRetentionDays * 86_400_000).toISOString();
+  const deleted = await cleanupExpiredData(closedBefore);
+  if (deleted.polls || deleted.sessions) {
+    console.log("expired data cleanup complete", deleted);
+  }
 }
 
 export function queuePollScheduleRefresh(): void {

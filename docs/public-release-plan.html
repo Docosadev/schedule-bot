@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Discord日程調整Botを一般公開するためのゴールと作業手順">
+  <title>Discord Bot 一般公開計画</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --background: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f0f4ff;
+      --text: #182033;
+      --muted: #65708a;
+      --line: #dfe5f1;
+      --primary: #5865f2;
+      --primary-dark: #3f4bd8;
+      --success: #16835f;
+      --warning: #a05c00;
+      --radius: 18px;
+      --shadow: 0 16px 40px rgba(38, 48, 80, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(88, 101, 242, 0.14), transparent 32rem),
+        var(--background);
+      color: var(--text);
+      font-family: "Noto Sans JP", "Yu Gothic UI", "Yu Gothic", system-ui, sans-serif;
+      line-height: 1.75;
+    }
+
+    a {
+      color: var(--primary-dark);
+    }
+
+    .page {
+      width: min(1080px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 48px 0 80px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: clamp(32px, 7vw, 72px);
+      border: 1px solid rgba(88, 101, 242, 0.16);
+      border-radius: 28px;
+      background: linear-gradient(135deg, #ffffff 0%, #f0f3ff 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      position: absolute;
+      right: -70px;
+      bottom: -100px;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: rgba(88, 101, 242, 0.11);
+      content: "";
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--primary-dark);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin-top: 0;
+      line-height: 1.35;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin-bottom: 18px;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      letter-spacing: -0.035em;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      font-size: clamp(1.45rem, 3vw, 2rem);
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: 1.08rem;
+    }
+
+    p {
+      margin-top: 0;
+    }
+
+    .lead {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      margin-bottom: 26px;
+      color: #3f4961;
+      font-size: 1.08rem;
+    }
+
+    .hero-tags,
+    .toc {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .tag,
+    .toc a {
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .toc {
+      margin: 22px 0 0;
+    }
+
+    .toc a:hover {
+      border-color: var(--primary);
+      color: var(--primary-dark);
+    }
+
+    section {
+      margin-top: 52px;
+      scroll-margin-top: 24px;
+    }
+
+    .section-intro {
+      max-width: 760px;
+      color: var(--muted);
+    }
+
+    .goal-card {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 28px;
+      padding: 28px;
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .goal-statement {
+      padding: 24px;
+      border-left: 5px solid var(--primary);
+      border-radius: 12px;
+      background: var(--surface-soft);
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+
+    .check-list,
+    .plain-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .check-list li,
+    .plain-list li {
+      position: relative;
+      margin: 10px 0;
+      padding-left: 28px;
+    }
+
+    .check-list li::before {
+      position: absolute;
+      left: 0;
+      color: var(--success);
+      font-weight: 900;
+      content: "✓";
+    }
+
+    .plain-list li::before {
+      position: absolute;
+      left: 7px;
+      color: var(--primary);
+      font-weight: 900;
+      content: "•";
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .architecture .box {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      text-align: center;
+    }
+
+    .architecture .arrow {
+      display: none;
+    }
+
+    .box strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--primary-dark);
+      font-size: 1.06rem;
+    }
+
+    .box p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .steps {
+      display: grid;
+      gap: 16px;
+      counter-reset: plan;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 52px 1fr auto;
+      gap: 18px;
+      align-items: start;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(38, 48, 80, 0.045);
+      counter-increment: plan;
+    }
+
+    .step-number {
+      display: grid;
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      background: var(--primary);
+      color: white;
+      font-weight: 900;
+      place-items: center;
+    }
+
+    .step-number::before {
+      content: counter(plan);
+    }
+
+    .step p {
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+
+    .priority {
+      white-space: nowrap;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #edf8f4;
+      color: var(--success);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .priority.later {
+      background: #fff5e6;
+      color: var(--warning);
+    }
+
+    .settings-grid,
+    .criteria-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .panel {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .panel.standard {
+      border-top: 5px solid var(--primary);
+    }
+
+    .panel.personal {
+      border-top: 5px solid #e55c99;
+    }
+
+    .panel strong {
+      color: var(--primary-dark);
+    }
+
+    .note {
+      margin-top: 20px;
+      padding: 18px 20px;
+      border: 1px solid #f0d7a7;
+      border-radius: 14px;
+      background: #fff9ee;
+      color: #694814;
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .phase {
+      padding: 20px;
+      border-radius: 16px;
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(38, 48, 80, 0.045);
+    }
+
+    .phase span {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--primary-dark);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+    }
+
+    footer {
+      margin-top: 56px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 800px) {
+      .goal-card,
+      .settings-grid,
+      .criteria-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .architecture,
+      .roadmap {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .step {
+        grid-template-columns: 44px 1fr;
+      }
+
+      .priority {
+        grid-column: 2;
+        justify-self: start;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .page {
+        width: min(100% - 20px, 1080px);
+        padding-top: 10px;
+      }
+
+      .hero {
+        padding: 28px 22px;
+        border-radius: 20px;
+      }
+
+      .architecture,
+      .roadmap {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        padding: 20px 16px;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      .page {
+        width: 100%;
+        padding: 0;
+      }
+
+      .hero,
+      .goal-card,
+      .step,
+      .panel,
+      .phase {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+
+      .toc {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Public Release Plan</p>
+      <h1>Discord Bot 一般公開計画</h1>
+      <p class="lead">
+        現在の個人サーバー向けBotを壊さずに、日程調整機能を安全な一般公開版として提供するためのゴールと作業手順です。
+        公開版と個人版を別ブランチで維持せず、ひとつのコードをサーバー別設定で切り替えます。
+      </p>
+      <div class="hero-tags">
+        <span class="tag">コードは1本</span>
+        <span class="tag">サーバー別設定</span>
+        <span class="tag">段階的な無料ベータ</span>
+      </div>
+      <nav class="toc" aria-label="ページ内ナビゲーション">
+        <a href="#goal">今回のゴール</a>
+        <a href="#structure">完成イメージ</a>
+        <a href="#branding">名前・アイコン</a>
+        <a href="#mentions">通知・メンション設定</a>
+        <a href="#steps">作業手順</a>
+        <a href="#settings">設定の切り分け</a>
+        <a href="#done">完了条件</a>
+      </nav>
+    </header>
+
+    <section id="goal">
+      <p class="eyebrow">Goal</p>
+      <h2>今回のゴール</h2>
+      <div class="goal-card">
+        <div>
+          <div class="goal-statement">
+            ひとつのBot・ひとつのコードベースで、一般サーバーには安全で汎用的な日程調整機能を提供し、
+            自分のサーバーでは現在の個性やポケモン商品通知を維持できる状態にする。
+          </div>
+        </div>
+        <div>
+          <h3>公開後に実現したい状態</h3>
+          <ul class="check-list">
+            <li>初めて導入したサーバーは安全な標準設定で動く</li>
+            <li>サーバー間で投票・設定・通知が混ざらない</li>
+            <li>個人専用機能は自分のサーバー以外では動かない</li>
+            <li>Renderの再起動後も重要な状態が復旧する</li>
+            <li>少数サーバーへ月額0円前後でベータ公開できる</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="structure">
+      <p class="eyebrow">Architecture</p>
+      <h2>完成イメージ</h2>
+      <p class="section-intro">
+        機能を別ブランチへ分けるのではなく、共通機能とサーバー別設定を組み合わせます。
+        作業用ブランチは使いますが、完成後はメインへ統合します。
+      </p>
+      <div class="architecture">
+        <div class="box">
+          <strong>共通コード</strong>
+          <p>日程調整・投票・集計・リマインド・開催情報</p>
+        </div>
+        <div class="box">
+          <strong>サーバー別設定</strong>
+          <p>口調・タイムゾーン・通知ロール・機能のON/OFF</p>
+        </div>
+        <div class="box">
+          <strong>動作を切り替え</strong>
+          <p>一般サーバーは標準設定、自分のサーバーは個人設定</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="branding">
+      <p class="eyebrow">Guild Branding</p>
+      <h2>公開用ブランドと現在の見た目を両立する</h2>
+      <p class="section-intro">
+        Discord Botアプリ自体は1つのまま、全体共通プロフィールを一般公開向けに変更します。
+        自分のサーバーではサーバー固有プロフィールを適用し、現在の名前・アイコン・雰囲気を維持します。
+      </p>
+
+      <div class="settings-grid">
+        <article class="panel standard">
+          <h3>Bot全体の公開プロフィール</h3>
+          <ul class="plain-list">
+            <li>一般向けの汎用的なBot名</li>
+            <li>独自のカレンダー系アイコン</li>
+            <li>一般向けの紹介文と説明</li>
+            <li>招待画面やアプリ情報ではこちらを表示</li>
+          </ul>
+        </article>
+        <article class="panel personal">
+          <h3>自分のサーバー固有プロフィール</h3>
+          <ul class="plain-list">
+            <li>現在使っているBotのニックネーム</li>
+            <li>現在使っているアイコン</li>
+            <li>現在のキャラクター口調</li>
+            <li>ポケモン商品通知などの個人向け機能</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="architecture" style="margin-top: 16px;">
+        <div class="box">
+          <strong>Discordアプリは1つ</strong>
+          <p>トークン、デプロイ、共通コードを増やさずに運用</p>
+        </div>
+        <div class="box">
+          <strong>公開プロフィール</strong>
+          <p>全体共通の名前とアイコンを一般向けに設定</p>
+        </div>
+        <div class="box">
+          <strong>自分のサーバーだけ上書き</strong>
+          <p>サーバー固有のニックネームとアイコンを適用</p>
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>表示上の注意：</strong>
+        自分のサーバー内のメッセージやメンバー一覧ではサーバー固有プロフィールを使用できますが、
+        Botの招待画面やDiscordアプリ情報などでは全体共通の公開用プロフィールが表示されます。
+        公開用へ変更する前に、現在のBot名とアイコン画像を個人プロフィール用素材として保存しておきます。
+      </div>
+    </section>
+
+    <section id="mentions">
+      <p class="eyebrow">Mention Settings</p>
+      <h2>日程調整ごとの通知・メンション設定</h2>
+      <p class="section-intro">
+        <code>/schedule</code>から発行する一時的なWebページに通知設定を追加します。
+        サーバー管理者が決めた初期値を表示し、日程調整の作成者が今回だけの通知先へ変更できる構成です。
+      </p>
+
+      <div class="goal-card">
+        <div>
+          <h3>利用時の流れ</h3>
+          <ol>
+            <li>Discordで<code>/schedule</code>を実行する</li>
+            <li>本人だけに30分間有効なWebページを案内する</li>
+            <li>Webページが対象サーバーの選択可能なロールを読み込む</li>
+            <li>日程・締切・通知先をまとめて設定する</li>
+            <li>投稿時に選択内容を投票データと一緒にNeonへ保存する</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Webページで個別設定する項目</h3>
+          <ul class="check-list">
+            <li>日程調整の初回投稿に含めるメンション</li>
+            <li>締切前リマインドに含めるメンション</li>
+            <li>締切・集計結果に含めるメンション</li>
+            <li>開催情報の投稿に含めるメンション</li>
+            <li>各項目を「メンションなし」にする選択肢</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="settings-grid" style="margin-top: 16px;">
+        <article class="panel standard">
+          <h3>最初の公開版で対応する範囲</h3>
+          <ul class="plain-list">
+            <li>メンションなし</li>
+            <li>サーバー内の選択可能なロールを1つ指定</li>
+            <li>サーバー共通の初期設定を今回だけ上書き</li>
+            <li>選択したロール名を投稿前に確認</li>
+          </ul>
+        </article>
+        <article class="panel personal">
+          <h3>将来追加できる項目</h3>
+          <ul class="plain-list">
+            <li>複数ロールの指定</li>
+            <li>特定ユーザーの指定</li>
+            <li>通知タイミングごとのテンプレート</li>
+            <li>チャンネルごとの初期設定</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="note">
+        <strong>誤爆防止：</strong>
+        Web画面へ自由入力された<code>@everyone</code>やメンション文字列をそのまま送信しません。
+        BotがDiscordから取得したロールIDだけを候補にし、送信時もDiscordの
+        <code>allowedMentions</code>で実際に通知可能な対象を限定します。
+        <code>@everyone</code>と<code>@here</code>はサーバー管理者が明示的に許可した場合だけ選択可能にします。
+      </div>
+
+      <div class="architecture" style="margin-top: 16px;">
+        <div class="box">
+          <strong>サーバーの初期値</strong>
+          <p>普段使う通知ロールと、各メッセージで通知するかを保存</p>
+        </div>
+        <div class="box">
+          <strong>今回の設定</strong>
+          <p>一時Webページで初回・リマインド・結果・開催案内を個別指定</p>
+        </div>
+        <div class="box">
+          <strong>投票に保存</strong>
+          <p>作成後に初期値が変わっても、その投票の設定は維持</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="steps">
+      <p class="eyebrow">Implementation Steps</p>
+      <h2>作業手順</h2>
+      <p class="section-intro">
+        上から順に進めます。特にアクセス制御とサーバー別設定は、一般公開前の必須作業です。
+      </p>
+      <div class="steps">
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>固有要素を洗い出して分類する</h3>
+            <p>ポケモン通知、固定チャンネル、固定ロール、固有口調、画像などを「共通」「設定可能」「個人専用」に分類します。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>マルチサーバーのアクセス制御を修正する</h3>
+            <p>投票の表示・投票者一覧・締切・延長・取消・削除で、投票IDだけでなく現在のサーバーIDも必ず照合します。</p>
+          </div>
+          <span class="priority">最優先</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>Neonにサーバー別設定を追加する</h3>
+            <p><code>guild_settings</code>を作り、口調、タイムゾーン、通知ロール、全体メンション可否、個人機能の有効状態を保存します。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>安全な標準設定を定義する</h3>
+            <p>未登録サーバーでは標準口調、個人機能OFF、通知ロール未設定、<code>@everyone</code>禁止を初期値にします。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>メッセージと通知設定を切り離す</h3>
+            <p>コード中の固有メッセージを標準スタイルと個人スタイルに分け、各サーバーの設定から選択します。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>ポケモン監視を個人専用機能として隔離する</h3>
+            <p>機能全体のON/OFFと許可サーバーを設定し、自分のサーバー以外では起動・通知されないようにします。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>管理者用の設定コマンドを追加する</h3>
+            <p>設定確認、タイムゾーン、標準の通知ロール、メッセージスタイルなどをDiscord上で変更できるようにし、操作権限を管理者へ限定します。</p>
+          </div>
+          <span class="priority later">ベータ前</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>Web作成画面へ通知設定を追加する</h3>
+            <p>一時セッションからサーバーとチャンネルを特定し、Botが取得したロール候補を表示します。初回投稿、リマインド、集計結果、開催情報ごとに通知先を選べるようにします。</p>
+          </div>
+          <span class="priority later">ベータ前</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>Web作成リンクを再起動に耐えられるようにする</h3>
+            <p>現在メモリに保存している一時セッションをNeonへ移し、Render再起動後も有効期限内のリンクを使えるようにします。推測困難な一度限りのURLとして扱い、投稿成功後に無効化します。</p>
+          </div>
+          <span class="priority later">ベータ前</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>メンションを安全に送信する</h3>
+            <p>保存されたロールが対象サーバーに存在し、Botから利用できることを送信直前にも確認します。削除済み・権限不足の場合は通知なしで本文だけを送信します。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>利用上限とデータ管理を追加する</h3>
+            <p>サーバーごとの受付中アンケート数、短時間の連続作成、入力サイズ、終了済みデータの保存期間を制限します。</p>
+          </div>
+          <span class="priority later">ベータ前</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>一般公開向けの見た目と案内を整える</h3>
+            <p>汎用的なBot名・独自アイコン・紹介文・必要権限・利用規約・プライバシーポリシー・データ削除窓口を用意します。変更前の名前と画像は個人プロフィール用として保存します。</p>
+          </div>
+          <span class="priority later">公開前</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>自分のサーバーへ固有プロフィールを適用する</h3>
+            <p>自分のサーバーIDだけに現在のニックネームとアイコンを設定します。起動時または設定変更時に適用し、失敗してもBot本体の起動は継続します。</p>
+          </div>
+          <span class="priority later">公開前</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>2つ以上のテストサーバーで分離を確認する</h3>
+            <p>個人設定と一般設定を同時に動かし、投票、権限、通知、口調、再起動復旧が相互に影響しないことを確認します。</p>
+          </div>
+          <span class="priority">必須</span>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true"></div>
+          <div>
+            <h3>招待制で段階的に公開する</h3>
+            <p>知人の1〜3サーバーから始め、5〜20サーバーへ広げます。1か月ほど使用量とエラーを観測してから一般公開を判断します。</p>
+          </div>
+          <span class="priority later">最終段階</span>
+        </article>
+      </div>
+    </section>
+
+    <section id="settings">
+      <p class="eyebrow">Profiles</p>
+      <h2>一般設定と個人設定の切り分け</h2>
+      <div class="settings-grid">
+        <article class="panel standard">
+          <h3>一般サーバーの標準設定</h3>
+          <ul class="plain-list">
+            <li>汎用的で親しみやすいメッセージ</li>
+            <li>ポケモン商品通知はOFF</li>
+            <li>各メッセージの通知ロールは未設定</li>
+            <li><code>@everyone</code>は使用しない</li>
+            <li>タイムゾーンはAsia/Tokyoから開始</li>
+          </ul>
+        </article>
+        <article class="panel personal">
+          <h3>自分のサーバーの個人設定</h3>
+          <ul class="plain-list">
+            <li>現在のニックネームとアイコンを維持</li>
+            <li>現在のキャラクター口調を維持可能</li>
+            <li>ポケモン商品通知をON</li>
+            <li>専用チャンネルとロールを設定</li>
+            <li>必要な個人向け拡張を有効化</li>
+            <li>共通の日程調整機能もそのまま利用</li>
+          </ul>
+        </article>
+      </div>
+      <div class="note">
+        <strong>運用方針：</strong>
+        実装中は <code>codex/public-release</code> のような作業ブランチを使っても、
+        一般版と個人版を恒久的な別ブランチにはしません。完成後は共通コードへ統合し、設定で切り替えます。
+      </div>
+    </section>
+
+    <section id="done">
+      <p class="eyebrow">Definition of Done</p>
+      <h2>今回の完了条件</h2>
+      <div class="criteria-grid">
+        <article class="panel">
+          <h3>安全性</h3>
+          <ul class="check-list">
+            <li>別サーバーの投票を参照・操作できない</li>
+            <li>設定変更はサーバー管理者だけが行える</li>
+            <li>個人機能が一般サーバーで実行されない</li>
+            <li>許可していないロールや全体メンションが通知されない</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h3>運用性</h3>
+          <ul class="check-list">
+            <li>設定未登録でも安全な初期値で動く</li>
+            <li>再起動後も投票・リマインドが復旧する</li>
+            <li>異常や使用量を確認できる</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h3>一般向け品質</h3>
+          <ul class="check-list">
+            <li>固有作品に依存しない名前・画像・文章</li>
+            <li>自分のサーバーでは現在の名前とアイコンを維持</li>
+            <li>導入方法と必要権限が分かる</li>
+            <li>問い合わせとデータ削除の方法がある</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h3>ベータ公開</h3>
+          <ul class="check-list">
+            <li>2つ以上のテストサーバーで動作確認済み</li>
+            <li>招待制で5〜20サーバーへ提供可能</li>
+            <li>Render・Neonの無料枠を観測できる</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <p class="eyebrow">Release Roadmap</p>
+      <h2>公開までの進め方</h2>
+      <div class="roadmap">
+        <article class="phase">
+          <span>PHASE 1</span>
+          <h3>安全化</h3>
+          <p>アクセス制御とサーバー分離を修正</p>
+        </article>
+        <article class="phase">
+          <span>PHASE 2</span>
+          <h3>汎用化</h3>
+          <p>設定・口調・個人機能を切り分け</p>
+        </article>
+        <article class="phase">
+          <span>PHASE 3</span>
+          <h3>耐久化</h3>
+          <p>再起動対策、利用制限、テスト</p>
+        </article>
+        <article class="phase">
+          <span>PHASE 4</span>
+          <h3>限定公開</h3>
+          <p>招待制ベータで利用状況を観測</p>
+        </article>
+      </div>
+    </section>
+
+    <footer>
+      <p>Discord Schedule Bot — 一般公開に向けた実装計画</p>
+    </footer>
+  </main>
+</body>
+</html>

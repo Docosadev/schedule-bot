@@ -1,4 +1,9 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
+import {
+  consumeWebSessionRecord,
+  createWebSessionRecord,
+  getActiveWebSessionRecord
+} from "./db.js";
 
 export type WebSession = {
   token: string;
@@ -8,42 +13,43 @@ export type WebSession = {
   expiresAt: number;
 };
 
-const sessions = new Map<string, WebSession>();
 const ttlMs = 30 * 60 * 1000;
 
-export function createWebSession(input: Omit<WebSession, "token" | "expiresAt">): WebSession {
-  cleanupExpiredSessions();
-
-  const session: WebSession = {
-    ...input,
-    token: randomBytes(24).toString("hex"),
-    expiresAt: Date.now() + ttlMs
-  };
-
-  sessions.set(session.token, session);
-  return session;
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }
 
-export function getWebSession(token: string): WebSession | null {
-  cleanupExpiredSessions();
+export async function createWebSession(input: Omit<WebSession, "token" | "expiresAt">): Promise<WebSession> {
+  const token = randomBytes(32).toString("base64url");
+  const now = new Date();
+  const expiresAt = now.getTime() + ttlMs;
+  await createWebSessionRecord({
+    tokenHash: hashToken(token),
+    guildId: input.guildId,
+    channelId: input.channelId,
+    creatorId: input.creatorId,
+    expiresAt: new Date(expiresAt).toISOString(),
+    consumedAt: null,
+    createdAt: now.toISOString()
+  });
+  return { ...input, token, expiresAt };
+}
 
-  const session = sessions.get(token);
-  if (!session || session.expiresAt <= Date.now()) {
-    sessions.delete(token);
+export async function getWebSession(token: string): Promise<WebSession | null> {
+  if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) {
     return null;
   }
-  return session;
+  const session = await getActiveWebSessionRecord(hashToken(token));
+  if (!session) return null;
+  return {
+    token,
+    guildId: session.guildId,
+    channelId: session.channelId,
+    creatorId: session.creatorId,
+    expiresAt: new Date(session.expiresAt).getTime()
+  };
 }
 
-export function consumeWebSession(token: string): void {
-  sessions.delete(token);
-}
-
-function cleanupExpiredSessions(): void {
-  const now = Date.now();
-  for (const [token, session] of sessions) {
-    if (session.expiresAt <= now) {
-      sessions.delete(token);
-    }
-  }
+export async function consumeWebSession(token: string): Promise<boolean> {
+  return consumeWebSessionRecord(hashToken(token));
 }

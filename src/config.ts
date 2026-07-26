@@ -8,7 +8,6 @@ export type Config = {
   databasePath: string;
   timezone: string;
   reminderHoursBefore: number[];
-  scheduleNotifyRoleId?: string;
   docosaMention?: string;
   docosaRoleId?: string;
   googleMapsApiKey?: string;
@@ -17,6 +16,10 @@ export type Config = {
   webBaseUrl: string;
   pokemonProductNotifyChannelId?: string;
   pokemonProductCheckTimes: string[];
+  personalGuildId?: string;
+  maxOpenPollsPerGuild: number;
+  pollCreationCooldownSeconds: number;
+  closedPollRetentionDays: number;
 };
 
 function requireEnv(name: string): string {
@@ -56,7 +59,6 @@ export const config: Config = {
   databasePath: process.env.DATABASE_PATH ?? "./data/schedule-bot.sqlite",
   timezone: process.env.BOT_TIMEZONE ?? "Asia/Tokyo",
   reminderHoursBefore: parseReminderHours(process.env.REMINDER_HOURS_BEFORE),
-  scheduleNotifyRoleId: process.env.SCHEDULE_NOTIFY_ROLE_ID,
   docosaMention: process.env.DOCOSA_MENTION,
   docosaRoleId: process.env.DOCOSA_ROLE_ID,
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY,
@@ -67,5 +69,9 @@ export const config: Config = {
     process.env.RENDER_EXTERNAL_URL ??
     `http://localhost:${process.env.WEB_PORT ?? process.env.PORT ?? "3000"}`,
   pokemonProductNotifyChannelId: process.env.POKEMON_PRODUCT_NOTIFY_CHANNEL_ID ?? "1522540129879851158",
-  pokemonProductCheckTimes: parseTimes(process.env.POKEMON_PRODUCT_CHECK_TIMES, ["09:00", "15:00", "21:00"])
+  pokemonProductCheckTimes: parseTimes(process.env.POKEMON_PRODUCT_CHECK_TIMES, ["09:00", "15:00", "21:00"]),
+  personalGuildId: process.env.PERSONAL_GUILD_ID ?? process.env.DISCORD_GUILD_ID,
+  maxOpenPollsPerGuild: Math.max(1, Number(process.env.MAX_OPEN_POLLS_PER_GUILD ?? "20")),
+  pollCreationCooldownSeconds: Math.max(0, Number(process.env.POLL_CREATION_COOLDOWN_SECONDS ?? "30")),
+  closedPollRetentionDays: Math.max(1, Number(process.env.CLOSED_POLL_RETENTION_DAYS ?? "90"))
 };

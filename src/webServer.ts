@@ -1,6 +1,7 @@
 import type { Client } from "discord.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
+import { getGuildSettings } from "./db.js";
 import { isGuildTextChannel, publishSchedulePoll } from "./pollService.js";
 import { REMINDER_CHOICES, normalizeReminderMinutes } from "./reminders.js";
 import { consumeWebSession, getWebSession } from "./webSessions.js";
@@ -13,6 +14,10 @@ type CreatePollRequest = {
   deadlineDate?: string;
   deadlineTime?: string;
   reminderMinutes?: number[];
+  initialNotifyRoleId?: string | null;
+  reminderNotifyRoleId?: string | null;
+  resultNotifyRoleId?: string | null;
+  eventNotifyRoleId?: string | null;
 };
 
 type PublishErrorResult = { ok: false; statusCode: number; message: string };
@@ -35,19 +40,32 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
 
   if (request.method === "GET" && url.pathname === "/schedule/new") {
     const token = url.searchParams.get("token") ?? "";
-    const session = getWebSession(token);
+    const session = await getWebSession(token);
     if (!session) {
       sendHtml(response, 404, renderExpiredPage());
       return;
     }
 
-    sendHtml(response, 200, renderCreatePage(token));
+    const guild = await client.guilds.fetch(session.guildId).catch(() => null);
+    const roles = guild
+      ? [...(await guild.roles.fetch().catch(() => new Map())).values()]
+          .filter((role) => role && role.id !== guild.id && role.mentionable && !role.managed)
+          .map((role) => ({ id: role!.id, name: role!.name }))
+          .sort((a, b) => a.name.localeCompare(b.name, "ja"))
+      : [];
+    const settings = await getGuildSettings(session.guildId);
+    sendHtml(response, 200, renderCreatePage(token, roles, {
+      initial: settings.defaultInitialNotifyRoleId,
+      reminder: settings.defaultReminderNotifyRoleId,
+      result: settings.defaultResultNotifyRoleId,
+      event: settings.defaultEventNotifyRoleId
+    }));
     return;
   }
 
   if (request.method === "POST" && url.pathname === "/api/schedule/new") {
     const token = url.searchParams.get("token") ?? "";
-    const session = getWebSession(token);
+    const session = await getWebSession(token);
     if (!session) {
       sendJson(response, 404, { ok: false, message: "リンクの有効期限が切れています。Discordから作成画面を開き直してください。" });
       return;
@@ -64,9 +82,20 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       body.reminderMinutes,
       new Set(REMINDER_CHOICES.map((choice) => choice.minutes))
     );
+    const requestedRoleIds = {
+      initial: body.initialNotifyRoleId || null,
+      reminder: body.reminderNotifyRoleId || null,
+      result: body.resultNotifyRoleId || null,
+      event: body.eventNotifyRoleId || null
+    };
 
-    if (!title) {
-      sendJson(response, 400, { ok: false, message: "タイトルを入力してください。" });
+    if (!title || title.length > 100) {
+      sendJson(response, 400, { ok: false, message: "タイトルを100文字以内で入力してください。" });
+      return;
+    }
+    if (selectedDates.some((date) => typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) ||
+        new Set(selectedDates).size !== selectedDates.length) {
+      sendJson(response, 400, { ok: false, message: "候補日の形式が正しくありません。" });
       return;
     }
     if (selectedDates.length === 0) {
@@ -95,6 +124,22 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       sendJson(response, 400, { ok: false, message: "投稿先チャンネルを確認できませんでした。" });
       return;
     }
+    const guildRoles = await channel.guild.roles.fetch();
+    const validateRole = (roleId: string | null): string | null => {
+      if (!roleId) return null;
+      const role = guildRoles.get(roleId);
+      return role && role.guild.id === session.guildId && role.mentionable && !role.managed ? role.id : null;
+    };
+    const validatedRoles = {
+      initial: validateRole(requestedRoleIds.initial),
+      reminder: validateRole(requestedRoleIds.reminder),
+      result: validateRole(requestedRoleIds.result),
+      event: validateRole(requestedRoleIds.event)
+    };
+    if (Object.entries(requestedRoleIds).some(([key, value]) => value && validatedRoles[key as keyof typeof validatedRoles] !== value)) {
+      sendJson(response, 400, { ok: false, message: "選択された通知ロールを利用できません。画面を開き直してください。" });
+      return;
+    }
 
     const datesInput = [...selectedDates].sort().map((date) => `${date} ${candidateStartTime}`).join("\n");
     const deadlineInput = `${deadlineDate} ${deadlineTime}`;
@@ -107,7 +152,10 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       deadlineInput,
       candidateEndTime,
       reminderMinutes,
-      notifyTarget: null,
+      notifyTarget: validatedRoles.result ? `<@&${validatedRoles.result}>` : null,
+      initialNotifyRoleId: validatedRoles.initial,
+      reminderNotifyRoleId: validatedRoles.reminder,
+      eventNotifyRoleId: validatedRoles.event,
       anonymous: false
     }).catch((error) => {
       const formatted = formatPublishError(error);
@@ -120,7 +168,7 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       return;
     }
 
-    consumeWebSession(token);
+    await consumeWebSession(token);
     sendJson(response, 200, { ok: true, messageUrl: result.messageUrl, pollId: result.pollId });
     return;
   }
@@ -228,8 +276,17 @@ function renderNotFoundPage(): string {
   return renderShell("Not Found", `<main class="narrow"><h1>Not Found</h1><p>ページが見つかりません。</p></main>`);
 }
 
-function renderCreatePage(token: string): string {
+function renderCreatePage(
+  token: string,
+  roles: { id: string; name: string }[],
+  defaults: { initial: string | null; reminder: string | null; result: string | null; event: string | null }
+): string {
   const reminderChoicesJson = JSON.stringify(REMINDER_CHOICES);
+  const rolesJson = JSON.stringify(roles);
+  const roleOptions = (selected: string | null) =>
+    `<option value="">メンションなし</option>${roles.map((role) =>
+      `<option value="${escapeHtml(role.id)}"${role.id === selected ? " selected" : ""}>@${escapeHtml(role.name)}</option>`
+    ).join("")}`;
 
   return renderShell(
     "日程調整を作成",
@@ -272,6 +329,15 @@ function renderCreatePage(token: string): string {
               <button type="button" id="addReminderButton" class="secondary-button">＋追加</button>
             </section>
 
+            <section class="reminder-section">
+              <h2>通知先</h2>
+              <label>初回投稿<select id="initialNotifyRoleId">${roleOptions(defaults.initial)}</select></label>
+              <label>締切前リマインド<select id="reminderNotifyRoleId">${roleOptions(defaults.reminder)}</select></label>
+              <label>締切・集計結果<select id="resultNotifyRoleId">${roleOptions(defaults.result)}</select></label>
+              <label>開催情報<select id="eventNotifyRoleId">${roleOptions(defaults.event)}</select></label>
+              <p class="hint">通知可能として設定されたロールだけを表示しています。</p>
+            </section>
+
             <div class="actions">
               <button type="submit" id="submitButton">Discordに投稿</button>
               <span id="status" role="status"></span>
@@ -301,6 +367,7 @@ function renderCreatePage(token: string): string {
       <script>
         const token = ${JSON.stringify(token)};
         const reminderChoices = ${reminderChoicesJson};
+        const availableRoles = ${rolesJson};
         const selectedDates = new Set();
         const cursor = new Date();
         cursor.setDate(1);
@@ -373,6 +440,10 @@ function renderCreatePage(token: string): string {
                 deadlineDate: deadlineDateInput.value,
                 deadlineTime: deadlineTimeInput.value,
                 reminderMinutes
+                ,initialNotifyRoleId: document.getElementById("initialNotifyRoleId").value || null
+                ,reminderNotifyRoleId: document.getElementById("reminderNotifyRoleId").value || null
+                ,resultNotifyRoleId: document.getElementById("resultNotifyRoleId").value || null
+                ,eventNotifyRoleId: document.getElementById("eventNotifyRoleId").value || null
               })
             });
             const result = await response.json();
@@ -618,6 +689,7 @@ function renderShell(title: string, body: string): string {
       line-height: 1;
     }
     #status { color: var(--muted); font-size: 14px; }
+    .hint { color: var(--muted); font-size: 12px; }
     #status a { color: var(--accent); font-weight: 700; }
     .calendar-head {
       display: grid;

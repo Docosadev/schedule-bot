@@ -11,7 +11,11 @@ export type Poll = {
   creatorId: string;
   title: string;
   deadline: string;
+  timezone: string;
   notifyTarget: string | null;
+  initialNotifyRoleId: string | null;
+  reminderNotifyRoleId: string | null;
+  eventNotifyRoleId: string | null;
   multipleChoice: boolean;
   anonymous: boolean;
   reminderMinutes: string;
@@ -20,6 +24,33 @@ export type Poll = {
   remindedHours: string;
   createdAt: string;
   closedAt: string | null;
+};
+
+export type MessageStyle = "standard" | "personal";
+
+export type GuildSettings = {
+  guildId: string;
+  timezone: string;
+  messageStyle: MessageStyle;
+  defaultInitialNotifyRoleId: string | null;
+  defaultReminderNotifyRoleId: string | null;
+  defaultResultNotifyRoleId: string | null;
+  defaultEventNotifyRoleId: string | null;
+  allowEveryoneMentions: boolean;
+  pokemonWatcherEnabled: boolean;
+  pokemonNotifyChannelId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WebSession = {
+  tokenHash: string;
+  guildId: string;
+  channelId: string;
+  creatorId: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  createdAt: string;
 };
 
 export type PollOption = {

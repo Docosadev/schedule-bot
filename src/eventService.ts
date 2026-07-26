@@ -10,6 +10,7 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuInteraction
 } from "discord.js";
+import { getGuildSettings, getPollForGuild } from "./db.js";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { config } from "./config.js";
@@ -24,6 +25,7 @@ type EventCandidate = {
 type ParsedResultMessage = {
   title: string;
   candidates: EventCandidate[];
+  pollId: string | null;
 };
 
 type PendingEventCreation = {
@@ -36,6 +38,7 @@ type PendingEventCreation = {
   location: string;
   venueUrl: string | null;
   fee: number;
+  pollId: string | null;
   createdAt: number;
 };
 
@@ -126,6 +129,7 @@ function parseMessageUrl(input: string): { guildId: string; channelId: string; m
 export function parseResultMessage(content: string): ParsedResultMessage | null {
   const lines = content.split(/\r?\n/).map((line) => line.trim());
   let title: string | null = null;
+  let pollId: string | null = null;
   const candidates: EventCandidate[] = [];
 
   for (const line of lines) {
@@ -136,6 +140,11 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
       null;
     if (currentTitle) {
       title = currentTitle.trim();
+      continue;
+    }
+    const currentPollId = normalized.match(/^ID:\s*(poll_[A-Za-z0-9_]+)$/)?.[1];
+    if (currentPollId) {
+      pollId = currentPollId;
       continue;
     }
 
@@ -163,7 +172,7 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
     return null;
   }
 
-  return { title, candidates };
+  return { title, candidates, pollId };
 }
 
 async function fetchSourceMessageByUrl(interaction: ChatInputCommandInteraction, messageUrl: string): Promise<Message<true>> {
@@ -237,8 +246,7 @@ function assertCreateEventPermissions(interaction: ChatInputCommandInteraction):
     if (
       !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
       !permissions.has(PermissionFlagsBits.SendMessages) ||
-      !permissions.has(PermissionFlagsBits.EmbedLinks) ||
-      !permissions.has(PermissionFlagsBits.MentionEveryone)
+      !permissions.has(PermissionFlagsBits.EmbedLinks)
     ) {
       throw new Error("おっと！BOTの権限が足りないぞよ！");
     }
@@ -279,17 +287,24 @@ async function createFromCandidate(
   content: string;
   embeds: EmbedBuilder[];
   files: AttachmentBuilder[];
-  allowedMentions: { parse: ("everyone")[] };
+  allowedMentions: { parse: []; roles?: string[] };
 }> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
     throw new Error("このコマンドはサーバー内で使ってねー！");
   }
 
+  const settings = await getGuildSettings(interaction.guildId);
+  const poll = state.pollId ? await getPollForGuild(state.pollId, interaction.guildId) : null;
+  const roleId = poll?.eventNotifyRoleId ?? settings.defaultEventNotifyRoleId;
+  const role = roleId
+    ? await interaction.guild.roles.fetch(roleId).catch(() => null)
+    : null;
+  const mention = role && role.mentionable && !role.managed ? `<@&${role.id}>\n` : "";
   return {
-    content: "@everyone\n開催情報が決定したぞー！みなのもの、要チェック！",
+    content: `${mention}開催情報が決定しました。内容をご確認ください。`,
     embeds: [buildEventInfoEmbed(state, candidate)],
     files: [buildEventThumbnailAttachment()],
-    allowedMentions: { parse: ["everyone"] }
+    allowedMentions: role ? { parse: [], roles: [role.id] } : { parse: [] }
   };
 }
 
@@ -320,8 +335,7 @@ function assertCanPostEventInfo(
   const permissions = channel.permissionsFor(botMember);
   if (
     !permissions?.has(PermissionFlagsBits.SendMessages) ||
-    !permissions.has(PermissionFlagsBits.EmbedLinks) ||
-    !permissions.has(PermissionFlagsBits.MentionEveryone)
+    !permissions.has(PermissionFlagsBits.EmbedLinks)
   ) {
     throw new Error("おっと！BOTの権限が足りないぞよ！");
   }
@@ -391,7 +405,8 @@ export async function handleCreateEventCommand(interaction: ChatInputCommandInte
       attendees,
       location,
       venueUrl,
-      fee
+      fee,
+      pollId: parsed.pollId
     };
 
     if (parsed.candidates.length === 1) {
