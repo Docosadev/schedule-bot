@@ -606,9 +606,21 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   }
 
   if (cancelled) {
+    const pollChannel = await fetchPollChannel(interaction, poll);
     await closePoll(poll.id, "cancelled");
     requestPollScheduleRefresh();
-    await interaction.editReply("日程調整をキャンセルしました。");
+    if (pollChannel) {
+      if (pollChannel.isThread() && pollChannel.archived) {
+        await pollChannel.setArchived(false, "日程調整のキャンセル通知");
+      }
+      await pollChannel.send({
+        content: `日程調整「${poll.title}」はキャンセルされました。`,
+        allowedMentions: { parse: [] }
+      });
+      await interaction.editReply("日程調整をキャンセルし、対象スレッドへ通知しました。");
+    } else {
+      await interaction.editReply("日程調整をキャンセルしましたが、通知先スレッドが見つかりませんでした。");
+    }
     return;
   }
 
@@ -634,23 +646,38 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
 }
 
 export async function extendPollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   const pollId = interaction.options.getString("poll_id", true);
   const deadlineInput = interaction.options.getString("deadline", true);
   const poll = await getPoll(pollId);
   const deadline = poll ? parseLocalDateTime(deadlineInput, poll.timezone) : null;
 
   if (!poll || !deadline) {
-    await interaction.reply({ content: "日程調整または締切日時を確認できません。入力内容を確認してください。", ephemeral: true });
+    await interaction.editReply("日程調整または締切日時を確認できません。入力内容を確認してください。");
     return;
   }
   if (!canManagePoll(interaction, poll)) {
-    await interaction.reply({ content: "この日程調整を操作する権限がありません。", ephemeral: true });
+    await interaction.editReply("この日程調整を操作する権限がありません。");
     return;
   }
 
+  const pollChannel = await fetchPollChannel(interaction, poll);
   await extendPoll(pollId, deadline.toISOString());
   requestPollScheduleRefresh();
-  await interaction.reply(`締切を延長しました: ${formatDeadline(deadline.toISOString(), poll.timezone)}`);
+  const formattedDeadline = formatDeadline(deadline.toISOString(), poll.timezone);
+  if (pollChannel) {
+    if (pollChannel.isThread() && pollChannel.archived) {
+      await pollChannel.setArchived(false, "日程調整の締切延長通知");
+    }
+    await pollChannel.send({
+      content: `日程調整「${poll.title}」の締切が延長されました。\n新しい締切: ${formattedDeadline}`,
+      allowedMentions: { parse: [] }
+    });
+    await interaction.editReply(`締切を延長し、対象スレッドへ通知しました: ${formattedDeadline}`);
+  } else {
+    await interaction.editReply(`締切を延長しましたが、通知先スレッドが見つかりませんでした: ${formattedDeadline}`);
+  }
 }
 
 export async function deletePollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {

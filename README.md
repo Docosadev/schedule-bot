@@ -220,19 +220,7 @@ ID: poll_xxx
 > ## 2026-07-03(金) 13:00-18:00
 ```
 
-### `/schedule-admin list`
-
-受付中のアンケート一覧を表示します。
-
-### `/schedule-admin show poll_id:poll_xxx`
-
-アンケートの詳細を表示します。
-
-### `/schedule-admin voters poll_id:poll_xxx`
-
-投票者一覧を表示します。
-
-### `/schedule-admin close poll_id:poll_xxx`
+### `/schedule-close poll_id:poll_xxx`
 
 アンケートを手動で締め切り、日程調整スレッドへ結果を投稿します。
 
@@ -252,15 +240,15 @@ ID: poll_xxx
 
 結果には投票者と候補日ごとの参加可否マトリクス画像が添付されます。
 
-### `/schedule-admin extend poll_id:poll_xxx deadline:2026-07-02 23:59`
+### `/schedule-extend poll_id:poll_xxx deadline:2026-07-02 23:59`
 
-締切を延長します。
+締切を延長し、対象の日程調整スレッドへ新しい締切を投稿します。
 
-### `/schedule-admin cancel poll_id:poll_xxx`
+### `/schedule-cancel poll_id:poll_xxx`
 
-アンケートをキャンセルします。
+アンケートをキャンセルし、対象の日程調整スレッドへ通知します。
 
-### `/schedule-admin delete poll_id:poll_xxx`
+### `/schedule-delete poll_id:poll_xxx`
 
 アンケート情報と関連 Discord メッセージを削除します。
 スレッド作成後のアンケートでは、日程調整スレッドごと削除します。
@@ -317,7 +305,7 @@ Google Mapsで開く
 5. WebUIからアンケートを投稿する
 6. 候補日に `⭕ / ❌ / 🔺` を付ける
 7. 投票済みメッセージが更新されることを確認する
-8. `/schedule-admin close` で結果と画像を確認する
+8. `/schedule-close` で結果と画像を確認する
 9. `/create-event` で開催情報のまとめが投稿されることを確認する
 
 ## 注意点
@@ -333,7 +321,9 @@ Google Mapsで開く
 
 通知先は `/schedule` で開く日程作成画面から、初回投稿、締切前リマインド、締切・集計結果、開催情報ごとに設定します。選択しなかった項目はメンションなしになります。未設定のサーバーでは通知なし・標準スタイル・個人機能OFFで動作します。
 
-個人用のメッセージスタイル、ポケモン商品監視、サーバー固有のBot名・アイコンは、`PERSONAL_GUILD_ID`にだけ登録される `/schedule-personal` で管理します。このコマンドは一般サーバーには登録されず、実行時にもサーバーIDを検証します。プロフィールは `/schedule-personal profile` で変更できます。
+タイムゾーンは `/schedule-timezone`、サーバーデータ削除は `/schedule-delete-data` で管理します。
+
+個人用のメッセージスタイル、ポケモン商品監視、サーバー固有のBot名・アイコンは、`PERSONAL_GUILD_ID`にだけ登録される `/schedule-style`、`/schedule-pokemon`、`/schedule-profile` で管理します。これらのコマンドは一般サーバーには登録されず、実行時にもサーバーIDを検証します。
 
 Web作成画面には、そのチャンネルでBotが通知できる通常ロールだけが表示されます。Botに「@everyone、@here、すべてのロールにメンション」権限がある場合は、メンション不可に設定された通常ロールも選択できます。`@everyone` と `@here` は、Botと日程作成者の両方が対象チャンネルで一斉メンション権限を持つ場合だけ選択できます。自由入力のメンションは送信しません。Web作成リンクはDBへハッシュ化して保存され、30分で失効します。
 

@@ -4,7 +4,7 @@
 
 - 投票の参照・操作時にDiscordサーバーIDを照合
 - 未登録サーバーは安全な標準設定（通知なし、個人機能OFF）
-- サーバー管理権限を持つ利用者だけが `/schedule-settings` を変更可能
+- サーバー管理権限を持つ利用者だけが `/schedule-timezone` と `/schedule-delete-data` を実行可能
 - Web作成リンクをハッシュ化してDBへ保存し、30分で失効
 - 通知候補をDiscordから取得したメンション可能ロールに限定
 - 日程作成画面で4種類の通知先を個別に設定
@@ -19,7 +19,7 @@
 1. Discord Developer Portalで一般向けのBot名、独自アイコン、説明、利用規約URL、プライバシーポリシーURLを設定する。
 2. `npm run commands:register` でグローバルコマンドを登録する。
 3. `PERSONAL_GUILD_ID` を自分のサーバーIDへ設定する。
-4. 自分のサーバーで `/schedule-personal style value:個人` を設定し、必要なら `/schedule-personal pokemon-watcher` で商品監視を有効にする。
+4. 自分のサーバーで `/schedule-style value:個人` を設定し、必要なら `/schedule-pokemon` で商品監視を有効にする。
 5. 一般用と個人用の2サーバーで、投票IDの相互参照拒否、通知、締切、再起動後のWebリンクを確認する。
 6. Renderのエラー、再起動回数、メモリ、HTTP応答と、Neonの容量・接続数を週次で確認する。
 7. 実際の問い合わせ先をプライバシーポリシーと利用規約に記載して公開する。

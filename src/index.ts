@@ -8,9 +8,10 @@ import {
 import {
   handleCreateEventSlashCommand,
   handlePersonalSettingsCommand,
-  handleScheduleAdminCommand,
   handleScheduleCommand,
-  handleScheduleSettingsCommand,
+  handleScheduleDeleteDataCommand,
+  handleScheduleManagementCommand,
+  handleScheduleTimezoneCommand,
   handleTimezoneSettingsModal,
   TIMEZONE_SETTINGS_MODAL_ID
 } from "./commands.js";
@@ -75,19 +76,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handleScheduleCommand(interaction);
       return;
     }
-    if (interaction.commandName === "schedule-admin") {
-      await handleScheduleAdminCommand(interaction);
-      return;
-    }
     if (interaction.commandName === "create-event") {
       await handleCreateEventSlashCommand(interaction);
       return;
     }
-    if (interaction.commandName === "schedule-settings") {
-      await handleScheduleSettingsCommand(interaction);
+    if (["schedule-close", "schedule-extend", "schedule-cancel", "schedule-delete"].includes(interaction.commandName)) {
+      await handleScheduleManagementCommand(interaction);
       return;
     }
-    if (interaction.commandName === "schedule-personal") {
+    if (interaction.commandName === "schedule-timezone") {
+      await handleScheduleTimezoneCommand(interaction);
+      return;
+    }
+    if (interaction.commandName === "schedule-delete-data") {
+      await handleScheduleDeleteDataCommand(interaction);
+      return;
+    }
+    if (["schedule-style", "schedule-pokemon", "schedule-profile"].includes(interaction.commandName)) {
       await handlePersonalSettingsCommand(interaction);
     }
   } catch (error) {

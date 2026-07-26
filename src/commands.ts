@@ -11,14 +11,13 @@ import {
   StringSelectMenuBuilder
 } from "discord.js";
 import { config } from "./config.js";
-import { deleteGuildData, getGuildSettings, getOpenPolls, getPollForGuild, saveGuildSettings } from "./db.js";
+import { deleteGuildData, getGuildSettings, saveGuildSettings } from "./db.js";
 import { handleCreateEventCommand } from "./eventService.js";
 import {
   closePollByCommand,
   deletePollByCommand,
   extendPollByCommand
 } from "./pollService.js";
-import { buildPollEmbed, buildPollSummary, buildVoterList } from "./render.js";
 import { createWebSession } from "./webSessions.js";
 
 export const scheduleCommand = new SlashCommandBuilder()
@@ -26,101 +25,97 @@ export const scheduleCommand = new SlashCommandBuilder()
   .setDescription("Web画面で日程調整アンケートを作成します")
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
-export const scheduleAdminCommand = new SlashCommandBuilder()
-  .setName("schedule-admin")
-  .setDescription("日程調整アンケートを管理します")
-  .addSubcommand((subcommand) => subcommand.setName("list").setDescription("受付中のアンケートを表示します"))
-  .addSubcommand((subcommand) =>
-    subcommand
-      .setName("show")
-      .setDescription("アンケートの詳細を表示します")
-      .addStringOption((option) => option.setName("poll_id").setDescription("アンケートID").setRequired(true))
-  )
-  .addSubcommand((subcommand) =>
-    subcommand
-      .setName("voters")
-      .setDescription("投票者一覧を表示します")
-      .addStringOption((option) => option.setName("poll_id").setDescription("アンケートID").setRequired(true))
-  )
-  .addSubcommand((subcommand) =>
-    subcommand
-      .setName("close")
-      .setDescription("アンケートを締め切って集計します")
-      .addStringOption((option) => option.setName("poll_id").setDescription("アンケートID").setRequired(true))
-  )
-  .addSubcommand((subcommand) =>
-    subcommand
-      .setName("extend")
-      .setDescription("アンケートの締切を延長します")
-      .addStringOption((option) => option.setName("poll_id").setDescription("アンケートID").setRequired(true))
-      .addStringOption((option) => option.setName("deadline").setDescription("新しい締切").setRequired(true))
-  )
-  .addSubcommand((subcommand) =>
-    subcommand
-      .setName("cancel")
-      .setDescription("アンケートをキャンセルします")
-      .addStringOption((option) => option.setName("poll_id").setDescription("アンケートID").setRequired(true))
-  )
-  .addSubcommand((subcommand) =>
-    subcommand
-      .setName("delete")
-      .setDescription("アンケートを削除します")
-      .addStringOption((option) => option.setName("poll_id").setDescription("アンケートID").setRequired(true))
+function addPollIdOption(command: SlashCommandBuilder) {
+  return command.addStringOption((option) =>
+    option.setName("poll_id").setDescription("日程調整ID").setRequired(true)
+  );
+}
+
+export const scheduleCloseCommand = addPollIdOption(
+  new SlashCommandBuilder().setName("schedule-close").setDescription("日程調整を締め切って集計します")
+).setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
+
+export const scheduleExtendCommand = addPollIdOption(
+  new SlashCommandBuilder().setName("schedule-extend").setDescription("日程調整の締切を延長します")
+)
+  .addStringOption((option) =>
+    option.setName("deadline").setDescription("新しい締切日時").setRequired(true)
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
+
+export const scheduleCancelCommand = addPollIdOption(
+  new SlashCommandBuilder().setName("schedule-cancel").setDescription("日程調整をキャンセルします")
+).setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
+
+export const scheduleDeleteCommand = addPollIdOption(
+  new SlashCommandBuilder().setName("schedule-delete").setDescription("日程調整を削除します")
+).setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
 export const createEventCommand = new SlashCommandBuilder()
   .setName("create-event")
   .setDescription("日程調整結果から開催情報のまとめを投稿します")
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
-export const scheduleSettingsCommand = new SlashCommandBuilder()
-  .setName("schedule-settings")
-  .setDescription("このサーバーの日程調整設定を管理します")
-  .addSubcommand((subcommand) =>
-    subcommand.setName("timezone").setDescription("タイムゾーンを選択します")
-  )
-  .addSubcommand((subcommand) =>
-    subcommand.setName("delete-data").setDescription("このサーバーの保存データを削除します")
-      .addStringOption((option) => option.setName("confirm").setDescription("確認のため DELETE と入力").setRequired(true))
+export const scheduleTimezoneCommand = new SlashCommandBuilder()
+  .setName("schedule-timezone")
+  .setDescription("このサーバーのタイムゾーンを選択します")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
+export const scheduleDeleteDataCommand = new SlashCommandBuilder()
+  .setName("schedule-delete-data")
+  .setDescription("このサーバーの保存データを削除します")
+  .addStringOption((option) =>
+    option.setName("confirm").setDescription("確認のため DELETE と入力").setRequired(true)
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
-export const personalSettingsCommand = new SlashCommandBuilder()
-  .setName("schedule-personal")
-  .setDescription("個人サーバー専用の設定を管理します")
-  .addSubcommand((subcommand) => subcommand.setName("show").setDescription("個人用設定を表示します"))
-  .addSubcommand((subcommand) =>
-    subcommand.setName("style").setDescription("メッセージスタイルを変更します")
-      .addStringOption((option) => option.setName("value").setDescription("スタイル").setRequired(true)
-        .addChoices({ name: "標準", value: "standard" }, { name: "個人", value: "personal" }))
+export const scheduleStyleCommand = new SlashCommandBuilder()
+  .setName("schedule-style")
+  .setDescription("個人サーバーのメッセージスタイルを変更します")
+  .addStringOption((option) =>
+    option.setName("value").setDescription("スタイル").setRequired(true)
+      .addChoices({ name: "標準", value: "standard" }, { name: "個人", value: "personal" })
   )
-  .addSubcommand((subcommand) =>
-    subcommand.setName("pokemon-watcher").setDescription("ポケモン商品監視を設定します")
-      .addBooleanOption((option) => option.setName("enabled").setDescription("有効にするか").setRequired(true))
-      .addChannelOption((option) => option.setName("channel").setDescription("通知先").addChannelTypes(ChannelType.GuildText))
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
+export const schedulePokemonCommand = new SlashCommandBuilder()
+  .setName("schedule-pokemon")
+  .setDescription("個人サーバーのポケモン商品監視を設定します")
+  .addBooleanOption((option) => option.setName("enabled").setDescription("有効にするか").setRequired(true))
+  .addChannelOption((option) =>
+    option.setName("channel").setDescription("通知先").addChannelTypes(ChannelType.GuildText)
   )
-  .addSubcommand((subcommand) =>
-    subcommand.setName("profile").setDescription("このサーバー内のBot名とアイコンを変更します")
-      .addStringOption((option) =>
-        option.setName("name").setDescription("サーバー内で表示するBot名").setMinLength(1).setMaxLength(32)
-      )
-      .addAttachmentOption((option) =>
-        option.setName("avatar").setDescription("サーバー内で表示するPNG・JPEG・WebP・GIF画像")
-      )
-      .addBooleanOption((option) =>
-        option.setName("reset_avatar").setDescription("サーバー固有アイコンを解除して公開アイコンへ戻す")
-      )
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
+export const scheduleProfileCommand = new SlashCommandBuilder()
+  .setName("schedule-profile")
+  .setDescription("個人サーバー内のBot名とアイコンを変更します")
+  .addStringOption((option) =>
+    option.setName("name").setDescription("サーバー内で表示するBot名").setMinLength(1).setMaxLength(32)
+  )
+  .addAttachmentOption((option) =>
+    option.setName("avatar").setDescription("サーバー内で表示するPNG・JPEG・WebP・GIF画像")
+  )
+  .addBooleanOption((option) =>
+    option.setName("reset_avatar").setDescription("サーバー固有アイコンを解除して公開アイコンへ戻す")
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 export const commands = [
   scheduleCommand.toJSON(),
-  scheduleAdminCommand.toJSON(),
   createEventCommand.toJSON(),
-  scheduleSettingsCommand.toJSON()
+  scheduleCloseCommand.toJSON(),
+  scheduleExtendCommand.toJSON(),
+  scheduleCancelCommand.toJSON(),
+  scheduleDeleteCommand.toJSON(),
+  scheduleTimezoneCommand.toJSON(),
+  scheduleDeleteDataCommand.toJSON()
 ];
-export const personalCommands = [personalSettingsCommand.toJSON()];
+export const personalCommands = [
+  scheduleStyleCommand.toJSON(),
+  schedulePokemonCommand.toJSON(),
+  scheduleProfileCommand.toJSON()
+];
 
 export const TIMEZONE_SETTINGS_MODAL_ID = "schedule_settings_timezone";
 const TIMEZONE_SELECT_ID = "timezone_value";
@@ -163,60 +158,20 @@ export async function handleScheduleCommand(interaction: ChatInputCommandInterac
   });
 }
 
-export async function handleScheduleAdminCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-  const subcommand = interaction.options.getSubcommand();
-
-  if (subcommand === "list") {
-    const polls = (await getOpenPolls()).filter((poll) => poll.guildId === interaction.guildId);
-    if (polls.length === 0) {
-      await interaction.reply({ content: "受付中の日程調整はありません。", ephemeral: true });
-      return;
-    }
-    await interaction.reply({
-      content: polls.map((poll) => `- ${poll.title} / ID: ${poll.id}`).join("\n"),
-      ephemeral: true
-    });
-    return;
-  }
-
-  if (subcommand === "show") {
-    const pollId = interaction.options.getString("poll_id", true);
-    const poll = interaction.guildId ? await getPollForGuild(pollId, interaction.guildId) : null;
-    if (!poll) {
-      await interaction.reply({ content: "指定された日程調整が見つかりません。IDを確認してください。", ephemeral: true });
-      return;
-    }
-    await interaction.reply({ content: await buildPollSummary(poll), embeds: [await buildPollEmbed(poll)], ephemeral: true });
-    return;
-  }
-
-  if (subcommand === "voters") {
-    const pollId = interaction.options.getString("poll_id", true);
-    const poll = interaction.guildId ? await getPollForGuild(pollId, interaction.guildId) : null;
-    if (!poll) {
-      await interaction.reply({ content: "指定された日程調整が見つかりません。IDを確認してください。", ephemeral: true });
-      return;
-    }
-    await interaction.reply({ content: await buildVoterList(poll), allowedMentions: { parse: [] }, ephemeral: true });
-    return;
-  }
-
-  if (subcommand === "close") {
+export async function handleScheduleManagementCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (interaction.commandName === "schedule-close") {
     await closePollByCommand(interaction);
     return;
   }
-
-  if (subcommand === "extend") {
+  if (interaction.commandName === "schedule-extend") {
     await extendPollByCommand(interaction);
     return;
   }
-
-  if (subcommand === "cancel") {
+  if (interaction.commandName === "schedule-cancel") {
     await closePollByCommand(interaction, true);
     return;
   }
-
-  if (subcommand === "delete") {
+  if (interaction.commandName === "schedule-delete") {
     await deletePollByCommand(interaction);
   }
 }
@@ -225,43 +180,43 @@ export async function handleCreateEventSlashCommand(interaction: ChatInputComman
   await handleCreateEventCommand(interaction);
 }
 
-export async function handleScheduleSettingsCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleScheduleTimezoneCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
     await interaction.reply({ content: "この設定はサーバー管理権限を持つ人だけが変更できます。", ephemeral: true });
     return;
   }
-  const subcommand = interaction.options.getSubcommand();
-  if (subcommand === "timezone") {
-    const modal = new ModalBuilder()
-      .setCustomId(TIMEZONE_SETTINGS_MODAL_ID)
-      .setTitle("タイムゾーン設定")
-      .addLabelComponents(
-        new LabelBuilder()
-          .setLabel("タイムゾーン")
-          .setDescription("日程と締切の表示に使用する地域を選択してください。")
-          .setStringSelectMenuComponent(
-            new StringSelectMenuBuilder()
-              .setCustomId(TIMEZONE_SELECT_ID)
-              .setPlaceholder("タイムゾーンを選択")
-              .setRequired(true)
-              .addOptions(...TIMEZONE_CHOICES)
-          )
-      );
-    await interaction.showModal(modal);
+  const modal = new ModalBuilder()
+    .setCustomId(TIMEZONE_SETTINGS_MODAL_ID)
+    .setTitle("タイムゾーン設定")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("タイムゾーン")
+        .setDescription("日程と締切の表示に使用する地域を選択してください。")
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId(TIMEZONE_SELECT_ID)
+            .setPlaceholder("タイムゾーンを選択")
+            .setRequired(true)
+            .addOptions(...TIMEZONE_CHOICES)
+        )
+    );
+  await interaction.showModal(modal);
+}
+
+export async function handleScheduleDeleteDataCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!interaction.guildId || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "この設定はサーバー管理権限を持つ人だけが変更できます。", ephemeral: true });
     return;
   }
-  if (subcommand === "delete-data") {
-    if (interaction.options.getString("confirm", true) !== "DELETE") {
-      await interaction.reply({ content: "削除を確定するには `DELETE` と正確に入力してください。", ephemeral: true });
-      return;
-    }
-    const deleted = await deleteGuildData(interaction.guildId);
-    await interaction.reply({
-      content: `このサーバーの保存データを削除しました（アンケート ${deleted.polls}件、作成リンク ${deleted.sessions}件、設定 ${deleted.settings}件）。Discord上の既存メッセージは削除されません。`,
-      ephemeral: true
-    });
+  if (interaction.options.getString("confirm", true) !== "DELETE") {
+    await interaction.reply({ content: "削除を確定するには `DELETE` と正確に入力してください。", ephemeral: true });
     return;
   }
+  const deleted = await deleteGuildData(interaction.guildId);
+  await interaction.reply({
+    content: `このサーバーの保存データを削除しました（アンケート ${deleted.polls}件、作成リンク ${deleted.sessions}件、設定 ${deleted.settings}件）。Discord上の既存メッセージは削除されません。`,
+    ephemeral: true
+  });
 }
 
 export async function handleTimezoneSettingsModal(interaction: ModalSubmitInteraction): Promise<void> {
@@ -308,21 +263,7 @@ export async function handlePersonalSettingsCommand(interaction: ChatInputComman
   }
 
   const settings = await getGuildSettings(interaction.guildId);
-  const subcommand = interaction.options.getSubcommand();
-  if (subcommand === "show") {
-    await interaction.reply({
-      content: [
-        `メッセージスタイル: ${settings.messageStyle}`,
-        `ポケモン商品監視: ${settings.pokemonWatcherEnabled ? "ON" : "OFF"}`,
-        `商品通知チャンネル: ${settings.pokemonNotifyChannelId ? `<#${settings.pokemonNotifyChannelId}>` : "なし"}`
-      ].join("\n"),
-      allowedMentions: { parse: [] },
-      ephemeral: true
-    });
-    return;
-  }
-
-  if (subcommand === "profile") {
+  if (interaction.commandName === "schedule-profile") {
     const nickname = interaction.options.getString("name")?.trim() || null;
     const avatar = interaction.options.getAttachment("avatar");
     const resetAvatar = interaction.options.getBoolean("reset_avatar") ?? false;
@@ -348,9 +289,9 @@ export async function handlePersonalSettingsCommand(interaction: ChatInputComman
     return;
   }
 
-  if (subcommand === "style") {
+  if (interaction.commandName === "schedule-style") {
     settings.messageStyle = interaction.options.getString("value", true) as "standard" | "personal";
-  } else if (subcommand === "pokemon-watcher") {
+  } else if (interaction.commandName === "schedule-pokemon") {
     const enabled = interaction.options.getBoolean("enabled", true);
     const channel = interaction.options.getChannel("channel");
     if (enabled && !channel) {
