@@ -307,12 +307,17 @@ async function createFromCandidate(
   const role = roleId
     ? await interaction.guild.roles.fetch(roleId).catch(() => null)
     : null;
-  const mention = role && role.mentionable && !role.managed ? `<@&${role.id}>\n` : "";
+  const canMentionRole = Boolean(
+    role &&
+    !role.managed &&
+    (role.mentionable || interaction.appPermissions?.has(PermissionFlagsBits.MentionEveryone))
+  );
+  const mention = canMentionRole && role ? `<@&${role.id}>\n` : "";
   return {
     content: `${mention}開催情報が決定しました。内容をご確認ください。`,
     embeds: [buildEventInfoEmbed(state, candidate)],
     files: [buildEventThumbnailAttachment()],
-    allowedMentions: role ? { parse: [], roles: [role.id] } : { parse: [] }
+    allowedMentions: canMentionRole && role ? { parse: [], roles: [role.id] } : { parse: [] }
   };
 }
 

@@ -225,12 +225,12 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
     await interaction.reply({ content: "この設定はサーバー管理権限を持つ人だけが変更できます。", ephemeral: true });
     return;
   }
-  const settings = await getGuildSettings(interaction.guildId);
   const subcommand = interaction.options.getSubcommand();
   if (subcommand === "notifications") {
-    await interaction.showModal(buildNotificationSettingsModal(settings));
+    await interaction.showModal(buildNotificationSettingsModal());
     return;
   }
+  const settings = await getGuildSettings(interaction.guildId);
   if (subcommand === "show") {
     await interaction.reply({
       content: [
@@ -293,8 +293,7 @@ const NOTIFICATION_ROLE_FIELDS = {
 function buildNotificationRoleLabel(
   label: string,
   description: string,
-  customId: string,
-  currentRoleId: string | null
+  customId: string
 ): LabelBuilder {
   const select = new RoleSelectMenuBuilder()
     .setCustomId(customId)
@@ -302,18 +301,13 @@ function buildNotificationRoleLabel(
     .setRequired(false)
     .setMinValues(0)
     .setMaxValues(1);
-  if (currentRoleId) {
-    select.setDefaultRoles(currentRoleId);
-  }
   return new LabelBuilder()
     .setLabel(label)
     .setDescription(description)
     .setRoleSelectMenuComponent(select);
 }
 
-function buildNotificationSettingsModal(
-  settings: Awaited<ReturnType<typeof getGuildSettings>>
-): ModalBuilder {
+function buildNotificationSettingsModal(): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(NOTIFICATION_SETTINGS_MODAL_ID)
     .setTitle("通知メンション設定")
@@ -321,26 +315,22 @@ function buildNotificationSettingsModal(
       buildNotificationRoleLabel(
         "初回投稿",
         "日程調整を作成したときに通知します。",
-        NOTIFICATION_ROLE_FIELDS.initial,
-        settings.defaultInitialNotifyRoleId
+        NOTIFICATION_ROLE_FIELDS.initial
       ),
       buildNotificationRoleLabel(
         "締切前リマインド",
         "回答締切が近づいたときに通知します。",
-        NOTIFICATION_ROLE_FIELDS.reminder,
-        settings.defaultReminderNotifyRoleId
+        NOTIFICATION_ROLE_FIELDS.reminder
       ),
       buildNotificationRoleLabel(
         "締切・集計結果",
         "日程調整を締め切ったときに通知します。",
-        NOTIFICATION_ROLE_FIELDS.result,
-        settings.defaultResultNotifyRoleId
+        NOTIFICATION_ROLE_FIELDS.result
       ),
       buildNotificationRoleLabel(
         "開催情報",
         "開催情報を投稿したときに通知します。",
-        NOTIFICATION_ROLE_FIELDS.event,
-        settings.defaultEventNotifyRoleId
+        NOTIFICATION_ROLE_FIELDS.event
       )
     );
 }
@@ -366,11 +356,15 @@ export async function handleNotificationSettingsModal(interaction: ModalSubmitIn
     event: selectedRole(NOTIFICATION_ROLE_FIELDS.event)
   };
   const invalidRole = Object.values(roles).find(
-    (role) => role && (role.managed || role.id === interaction.guildId || !role.mentionable)
+    (role) =>
+      role &&
+      (role.managed ||
+        role.id === interaction.guildId ||
+        (!role.mentionable && !interaction.appPermissions?.has(PermissionFlagsBits.MentionEveryone)))
   );
   if (invalidRole) {
     await interaction.reply({
-      content: `@${invalidRole.name} は通知に利用できません。メンション可能な通常ロールを選択してください。`,
+      content: `@${invalidRole.name} は通知に利用できません。Botが通知できる通常ロールを選択してください。`,
       flags: MessageFlags.Ephemeral
     });
     return;

@@ -1,4 +1,4 @@
-import type { Client } from "discord.js";
+import { PermissionFlagsBits, type Client } from "discord.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
 import { getGuildSettings } from "./db.js";
@@ -47,9 +47,23 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
     }
 
     const guild = await client.guilds.fetch(session.guildId).catch(() => null);
+    const channel = await client.channels.fetch(session.channelId).catch(() => null);
+    const botMember = guild?.members.me ?? await guild?.members.fetchMe().catch(() => null);
+    const canMentionEveryRole = Boolean(
+      guild &&
+      botMember &&
+      isGuildTextChannel(channel) &&
+      channel.guild.id === guild.id &&
+      channel.permissionsFor(botMember)?.has(PermissionFlagsBits.MentionEveryone)
+    );
     const roles = guild
       ? [...(await guild.roles.fetch().catch(() => new Map())).values()]
-          .filter((role) => role && role.id !== guild.id && role.mentionable && !role.managed)
+          .filter((role) =>
+            role &&
+            role.id !== guild.id &&
+            !role.managed &&
+            (role.mentionable || canMentionEveryRole)
+          )
           .map((role) => ({ id: role!.id, name: role!.name }))
           .sort((a, b) => a.name.localeCompare(b.name, "ja"))
       : [];
@@ -125,10 +139,19 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       return;
     }
     const guildRoles = await channel.guild.roles.fetch();
+    const botMember = channel.guild.members.me ?? await channel.guild.members.fetchMe().catch(() => null);
+    const canMentionEveryRole = Boolean(
+      botMember && channel.permissionsFor(botMember)?.has(PermissionFlagsBits.MentionEveryone)
+    );
     const validateRole = (roleId: string | null): string | null => {
       if (!roleId) return null;
       const role = guildRoles.get(roleId);
-      return role && role.guild.id === session.guildId && role.mentionable && !role.managed ? role.id : null;
+      return role &&
+        role.guild.id === session.guildId &&
+        !role.managed &&
+        (role.mentionable || canMentionEveryRole)
+        ? role.id
+        : null;
     };
     const validatedRoles = {
       initial: validateRole(requestedRoleIds.initial),
