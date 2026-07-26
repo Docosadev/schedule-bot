@@ -1,7 +1,12 @@
 import {
   ChatInputCommandInteraction,
   ChannelType,
+  LabelBuilder,
+  MessageFlags,
+  ModalBuilder,
+  ModalSubmitInteraction,
   PermissionFlagsBits,
+  RoleSelectMenuBuilder,
   Routes,
   SlashCommandBuilder
 } from "discord.js";
@@ -67,41 +72,6 @@ export const scheduleAdminCommand = new SlashCommandBuilder()
 export const createEventCommand = new SlashCommandBuilder()
   .setName("create-event")
   .setDescription("日程調整結果から開催情報のまとめを投稿します")
-  .addIntegerOption((option) =>
-    option
-      .setName("price")
-      .setDescription("貸会議室などの利用総額")
-      .setRequired(true)
-      .setMinValue(0)
-  )
-  .addIntegerOption((option) =>
-    option
-      .setName("attendees")
-      .setDescription("現地参加人数")
-      .setRequired(true)
-      .setMinValue(1)
-  )
-  .addStringOption((option) =>
-    option
-      .setName("location")
-      .setDescription("開催場所名、住所、または会場URL")
-      .setRequired(true)
-      .setMaxLength(500)
-  )
-  .addStringOption((option) =>
-    option
-      .setName("venue_url")
-      .setDescription("会場リンク。locationにURLを入れた場合は省略できます")
-      .setRequired(false)
-      .setMaxLength(500)
-  )
-  .addStringOption((option) =>
-    option
-      .setName("message_url")
-      .setDescription("対象の結果メッセージURL。省略時は直近100件から探します")
-      .setRequired(false)
-      .setMaxLength(200)
-  )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
 export const scheduleSettingsCommand = new SlashCommandBuilder()
@@ -122,6 +92,9 @@ export const scheduleSettingsCommand = new SlashCommandBuilder()
           { name: "開催情報", value: "event" }
         ))
       .addRoleOption((option) => option.setName("role").setDescription("省略するとメンションなし").setRequired(false))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("notifications").setDescription("すべての通知ロールをまとめて変更します")
   )
   .addSubcommand((subcommand) =>
     subcommand.setName("delete-data").setDescription("このサーバーの保存データを削除します")
@@ -254,6 +227,10 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
   }
   const settings = await getGuildSettings(interaction.guildId);
   const subcommand = interaction.options.getSubcommand();
+  if (subcommand === "notifications") {
+    await interaction.showModal(buildNotificationSettingsModal(settings));
+    return;
+  }
   if (subcommand === "show") {
     await interaction.reply({
       content: [
@@ -303,6 +280,113 @@ export async function handleScheduleSettingsCommand(interaction: ChatInputComman
   settings.updatedAt = new Date().toISOString();
   await saveGuildSettings(settings);
   await interaction.reply({ content: "サーバー設定を更新しました。", ephemeral: true });
+}
+
+export const NOTIFICATION_SETTINGS_MODAL_ID = "schedule_settings_notifications";
+const NOTIFICATION_ROLE_FIELDS = {
+  initial: "notification_role_initial",
+  reminder: "notification_role_reminder",
+  result: "notification_role_result",
+  event: "notification_role_event"
+} as const;
+
+function buildNotificationRoleLabel(
+  label: string,
+  description: string,
+  customId: string,
+  currentRoleId: string | null
+): LabelBuilder {
+  const select = new RoleSelectMenuBuilder()
+    .setCustomId(customId)
+    .setPlaceholder("メンションなし")
+    .setRequired(false)
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (currentRoleId) {
+    select.setDefaultRoles(currentRoleId);
+  }
+  return new LabelBuilder()
+    .setLabel(label)
+    .setDescription(description)
+    .setRoleSelectMenuComponent(select);
+}
+
+function buildNotificationSettingsModal(
+  settings: Awaited<ReturnType<typeof getGuildSettings>>
+): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(NOTIFICATION_SETTINGS_MODAL_ID)
+    .setTitle("通知メンション設定")
+    .addLabelComponents(
+      buildNotificationRoleLabel(
+        "初回投稿",
+        "日程調整を作成したときに通知します。",
+        NOTIFICATION_ROLE_FIELDS.initial,
+        settings.defaultInitialNotifyRoleId
+      ),
+      buildNotificationRoleLabel(
+        "締切前リマインド",
+        "回答締切が近づいたときに通知します。",
+        NOTIFICATION_ROLE_FIELDS.reminder,
+        settings.defaultReminderNotifyRoleId
+      ),
+      buildNotificationRoleLabel(
+        "締切・集計結果",
+        "日程調整を締め切ったときに通知します。",
+        NOTIFICATION_ROLE_FIELDS.result,
+        settings.defaultResultNotifyRoleId
+      ),
+      buildNotificationRoleLabel(
+        "開催情報",
+        "開催情報を投稿したときに通知します。",
+        NOTIFICATION_ROLE_FIELDS.event,
+        settings.defaultEventNotifyRoleId
+      )
+    );
+}
+
+export async function handleNotificationSettingsModal(interaction: ModalSubmitInteraction): Promise<void> {
+  if (
+    interaction.customId !== NOTIFICATION_SETTINGS_MODAL_ID ||
+    !interaction.guildId ||
+    !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
+  ) {
+    await interaction.reply({
+      content: "この設定はサーバー管理権限を持つユーザーのみ変更できます。",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const selectedRole = (customId: string) => interaction.fields.getSelectedRoles(customId)?.first() ?? null;
+  const roles = {
+    initial: selectedRole(NOTIFICATION_ROLE_FIELDS.initial),
+    reminder: selectedRole(NOTIFICATION_ROLE_FIELDS.reminder),
+    result: selectedRole(NOTIFICATION_ROLE_FIELDS.result),
+    event: selectedRole(NOTIFICATION_ROLE_FIELDS.event)
+  };
+  const invalidRole = Object.values(roles).find(
+    (role) => role && (role.managed || role.id === interaction.guildId || !role.mentionable)
+  );
+  if (invalidRole) {
+    await interaction.reply({
+      content: `@${invalidRole.name} は通知に利用できません。メンション可能な通常ロールを選択してください。`,
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const settings = await getGuildSettings(interaction.guildId);
+  settings.defaultInitialNotifyRoleId = roles.initial?.id ?? null;
+  settings.defaultReminderNotifyRoleId = roles.reminder?.id ?? null;
+  settings.defaultResultNotifyRoleId = roles.result?.id ?? null;
+  settings.defaultEventNotifyRoleId = roles.event?.id ?? null;
+  settings.updatedAt = new Date().toISOString();
+  await saveGuildSettings(settings);
+  await interaction.reply({
+    content: "通知メンション設定を更新しました。",
+    flags: MessageFlags.Ephemeral
+  });
 }
 
 export async function handlePersonalSettingsCommand(interaction: ChatInputCommandInteraction): Promise<void> {

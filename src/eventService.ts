@@ -4,11 +4,16 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildTextBasedChannel,
+  LabelBuilder,
   Message,
   MessageFlags,
+  ModalBuilder,
+  ModalSubmitInteraction,
   PermissionFlagsBits,
   StringSelectMenuBuilder,
-  StringSelectMenuInteraction
+  StringSelectMenuInteraction,
+  TextInputBuilder,
+  TextInputStyle
 } from "discord.js";
 import { getGuildSettings, getPollForGuild } from "./db.js";
 import { randomUUID } from "node:crypto";
@@ -46,6 +51,10 @@ const PENDING_EVENT_TTL_MS = 15 * 60_000;
 const EVENT_THUMBNAIL_FILE_NAME = "icon_calender.png";
 const EVENT_THUMBNAIL_PATH = resolve(process.cwd(), "assets", EVENT_THUMBNAIL_FILE_NAME);
 const pendingEventCreations = new Map<string, PendingEventCreation>();
+export const CREATE_EVENT_MODAL_ID = "create_event_input";
+
+type CreateEventInteraction = ChatInputCommandInteraction | ModalSubmitInteraction;
+type EventPostInteraction = ModalSubmitInteraction | StringSelectMenuInteraction;
 
 function isGuildTextChannel(channel: unknown): channel is GuildTextBasedChannel {
   return typeof channel === "object" && channel !== null && "send" in channel && "messages" in channel;
@@ -175,7 +184,7 @@ export function parseResultMessage(content: string): ParsedResultMessage | null 
   return { title, candidates, pollId };
 }
 
-async function fetchSourceMessageByUrl(interaction: ChatInputCommandInteraction, messageUrl: string): Promise<Message<true>> {
+async function fetchSourceMessageByUrl(interaction: CreateEventInteraction, messageUrl: string): Promise<Message<true>> {
   const parsed = parseMessageUrl(messageUrl);
   if (!parsed || parsed.guildId !== interaction.guildId) {
     throw new Error("メッセージURLを読み取れません。同じサーバーの結果メッセージURLを指定してください。");
@@ -210,8 +219,7 @@ async function findLatestResultMessage(channel: GuildTextBasedChannel): Promise<
   return null;
 }
 
-async function resolveSourceMessage(interaction: ChatInputCommandInteraction): Promise<Message<true>> {
-  const messageUrl = interaction.options.getString("message_url");
+async function resolveSourceMessage(interaction: CreateEventInteraction, messageUrl: string | null): Promise<Message<true>> {
   if (messageUrl) {
     return fetchSourceMessageByUrl(interaction, messageUrl);
   }
@@ -227,7 +235,7 @@ async function resolveSourceMessage(interaction: ChatInputCommandInteraction): P
   return message;
 }
 
-function assertCreateEventPermissions(interaction: ChatInputCommandInteraction): void {
+function assertCreateEventPermissions(interaction: CreateEventInteraction): void {
   if (!interaction.guild || !interaction.guildId) {
     throw new Error("このコマンドはサーバー内で実行してください。");
   }
@@ -280,7 +288,7 @@ function formatCreateEventError(error: unknown): string {
 }
 
 async function createFromCandidate(
-  interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
+  interaction: EventPostInteraction,
   state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
   candidate: EventCandidate
 ): Promise<{
@@ -308,7 +316,7 @@ async function createFromCandidate(
   };
 }
 
-function resolveEventInfoOutputChannel(interaction: ChatInputCommandInteraction | StringSelectMenuInteraction): GuildTextBasedChannel {
+function resolveEventInfoOutputChannel(interaction: EventPostInteraction): GuildTextBasedChannel {
   if (!isGuildTextChannel(interaction.channel)) {
     throw new Error("サーバー内のテキストチャンネルで実行してください。");
   }
@@ -324,7 +332,7 @@ function resolveEventInfoOutputChannel(interaction: ChatInputCommandInteraction 
 }
 
 function assertCanPostEventInfo(
-  interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
+  interaction: EventPostInteraction,
   channel: GuildTextBasedChannel
 ): void {
   const botMember = interaction.guild?.members.me;
@@ -342,7 +350,7 @@ function assertCanPostEventInfo(
 }
 
 async function postEventInfo(
-  interaction: ChatInputCommandInteraction | StringSelectMenuInteraction,
+  interaction: EventPostInteraction,
   state: Omit<PendingEventCreation, "token" | "candidates" | "createdAt">,
   candidate: EventCandidate
 ): Promise<Message<true>> {
@@ -368,29 +376,99 @@ function buildCandidateSelect(state: PendingEventCreation): ActionRowBuilder<Str
 
 export async function handleCreateEventCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   assertCreateEventPermissions(interaction);
+  await interaction.showModal(buildCreateEventModal());
+}
 
-  const price = interaction.options.getInteger("price", true);
-  const attendees = interaction.options.getInteger("attendees", true);
-  const location = interaction.options.getString("location", true).trim();
-  const venueUrl = interaction.options.getString("venue_url")?.trim() || null;
+function buildCreateEventModal(): ModalBuilder {
+  return new ModalBuilder()
+    .setCustomId(CREATE_EVENT_MODAL_ID)
+    .setTitle("開催情報の入力")
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel("利用総額（円）")
+        .setDescription("貸会議室などの利用総額を入力してください。")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("event_price")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder("例: 10000")
+            .setRequired(true)
+            .setMaxLength(12)
+        ),
+      new LabelBuilder()
+        .setLabel("現地参加人数")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("event_attendees")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder("例: 5")
+            .setRequired(true)
+            .setMaxLength(6)
+        ),
+      new LabelBuilder()
+        .setLabel("開催場所")
+        .setDescription("会場名、住所、または会場URLを入力してください。")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("event_location")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setMaxLength(500)
+        ),
+      new LabelBuilder()
+        .setLabel("会場URL（任意）")
+        .setDescription("開催場所にURLを入力した場合は省略できます。")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("event_venue_url")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+            .setMaxLength(500)
+        ),
+      new LabelBuilder()
+        .setLabel("結果メッセージURL（任意）")
+        .setDescription("省略時は現在のチャンネルから自動検出します。")
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId("event_message_url")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+            .setMaxLength(200)
+        )
+    );
+}
 
-  if (attendees <= 0) {
-    await interaction.reply({ content: "参加人数は1人以上で指定してください。", flags: MessageFlags.Ephemeral });
+function parseIntegerInput(value: string, label: string, minimum: number): number {
+  const normalized = value.trim().replace(/[,\s]/g, "");
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`${label}は半角数字で入力してください。`);
+  }
+  const result = Number(normalized);
+  if (!Number.isSafeInteger(result) || result < minimum) {
+    throw new Error(`${label}は${minimum}以上の整数で入力してください。`);
+  }
+  return result;
+}
+
+export async function handleCreateEventModal(interaction: ModalSubmitInteraction): Promise<void> {
+  if (interaction.customId !== CREATE_EVENT_MODAL_ID) {
     return;
   }
-  if (price < 0) {
-    await interaction.reply({ content: "利用総額は0円以上で指定してください。", flags: MessageFlags.Ephemeral });
-    return;
-  }
+  assertCreateEventPermissions(interaction);
+
+  const price = parseIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
+  const attendees = parseIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "現地参加人数", 1);
+  const location = interaction.fields.getTextInputValue("event_location").trim();
+  const venueUrl = interaction.fields.getTextInputValue("event_venue_url").trim() || null;
+  const messageUrl = interaction.fields.getTextInputValue("event_message_url").trim() || null;
   if (!location) {
-    await interaction.reply({ content: "会場名、住所、または会場URLを入力してください。", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "開催場所を入力してください。", flags: MessageFlags.Ephemeral });
     return;
   }
 
-  await interaction.deferReply();
-
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const sourceMessage = await resolveSourceMessage(interaction);
+    const sourceMessage = await resolveSourceMessage(interaction, messageUrl);
     const parsed = parseResultMessage(sourceMessage.content);
     if (!parsed) {
       await interaction.editReply("日程調整結果を解析できません。対象メッセージを確認してください。");
@@ -463,7 +541,7 @@ export async function handleCreateEventSelection(interaction: StringSelectMenuIn
 
   try {
     const postedMessage = await postEventInfo(interaction, state, candidate);
-    await interaction.message.edit({ content: `開催情報を本流チャンネルへ投稿しておいたぞ: ${postedMessage.url}`, components: [] });
+    await interaction.message.edit({ content: `開催情報を投稿しました: ${postedMessage.url}`, components: [] });
   } catch (error) {
     await interaction.message.edit({ content: formatCreateEventError(error), components: [] });
   }

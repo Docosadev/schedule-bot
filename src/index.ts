@@ -7,14 +7,16 @@ import {
 } from "discord.js";
 import {
   handleCreateEventSlashCommand,
+  handleNotificationSettingsModal,
   handlePersonalSettingsCommand,
   handleScheduleAdminCommand,
   handleScheduleCommand,
-  handleScheduleSettingsCommand
+  handleScheduleSettingsCommand,
+  NOTIFICATION_SETTINGS_MODAL_ID
 } from "./commands.js";
 import { config } from "./config.js";
 import { getGuildSettings, hasGuildSettings, migrate, saveGuildSettings } from "./db.js";
-import { handleCreateEventSelection } from "./eventService.js";
+import { CREATE_EVENT_MODAL_ID, handleCreateEventModal, handleCreateEventSelection } from "./eventService.js";
 import { handleReactionAdd, handleReactionRemove } from "./pollService.js";
 import { startPokemonProductScheduler } from "./pokemonProductWatcher.js";
 import { startPollScheduler } from "./pollScheduler.js";
@@ -49,6 +51,17 @@ client.once(Events.ClientReady, (readyClient) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === CREATE_EVENT_MODAL_ID) {
+        await handleCreateEventModal(interaction);
+        return;
+      }
+      if (interaction.customId === NOTIFICATION_SETTINGS_MODAL_ID) {
+        await handleNotificationSettingsModal(interaction);
+        return;
+      }
+    }
+
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith("create_event:")) {
       await handleCreateEventSelection(interaction);
       return;

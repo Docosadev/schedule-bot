@@ -7,6 +7,8 @@
 - サーバー管理権限を持つ利用者だけが `/schedule-settings` を変更可能
 - Web作成リンクをハッシュ化してDBへ保存し、30分で失効
 - 通知候補をDiscordから取得したメンション可能ロールに限定
+- `/schedule-settings notifications` で4種類の通知ロールをまとめて設定
+- `/create-event` の開催情報をDiscord標準の入力画面から入力
 - 送信直前にもロールの存在とサーバーを確認し、`allowedMentions` を限定
 - 個人用設定コマンドと商品監視を `PERSONAL_GUILD_ID` のギルドだけに登録し、実行時にもサーバーIDを検証
 - サーバーごとの受付中投票数と連続作成を制限

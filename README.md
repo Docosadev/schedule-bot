@@ -266,9 +266,10 @@ ID: poll_xxx
 スレッド作成後のアンケートでは、日程調整スレッドごと削除します。
 すでに手動削除済みのメッセージは無視します。
 
-### `/create-event price:5500 attendees:3 location:会場名 venue_url:https://example.com`
+### `/create-event`
 
-直近100件のメッセージから日程調整結果を探し、開催情報のまとめを投稿します。
+Discord標準の入力画面を開き、利用総額、現地参加人数、開催場所などをまとめて入力します。
+送信後は直近100件のメッセージから日程調整結果を探し、開催情報のまとめを投稿します。
 日程調整スレッド内で実行した場合、開催情報は親の本流チャンネルへ投稿します。
 
 主な挙動:
@@ -281,11 +282,7 @@ ID: poll_xxx
 - `GOOGLE_MAPS_API_KEY` を設定している場合、`location` の住所から地図画像を表示します
 - 地図画像そのものはDiscord仕様上Google Mapsへ直接リンクできないため、開催場所欄のURLから開けるようにします
 
-対象メッセージを明示したい場合は `message_url` を指定できます。
-
-```text
-/create-event price:5500 attendees:3 location:会場名 venue_url:https://example.com message_url:https://discord.com/channels/...
-```
+対象メッセージを明示したい場合は、入力画面の「結果メッセージURL」に同じサーバーのメッセージURLを入力できます。
 
 完了メッセージ例:
 
@@ -334,7 +331,7 @@ ID: poll_xxx
 
 ## 一般公開向け設定
 
-サーバー管理者は `/schedule-settings` でタイムゾーンと各通知タイミングの初期ロールを設定できます。未設定のサーバーでは通知なし・標準スタイル・個人機能OFFで動作します。
+サーバー管理者は `/schedule-settings notifications` のDiscord標準入力画面から、初回投稿、締切前リマインド、締切・集計結果、開催情報の通知ロールをまとめて設定できます。選択しなかった項目はメンションなしになります。個別に変更する場合は `/schedule-settings notify-role` も利用できます。未設定のサーバーでは通知なし・標準スタイル・個人機能OFFで動作します。
 
 個人用のメッセージスタイル、ポケモン商品監視、サーバー固有のBot名・アイコンは、`PERSONAL_GUILD_ID`にだけ登録される `/schedule-personal` で管理します。このコマンドは一般サーバーには登録されず、実行時にもサーバーIDを検証します。プロフィールは `/schedule-personal profile` で変更できます。
 
