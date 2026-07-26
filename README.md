@@ -62,14 +62,16 @@ WEB_BASE_URL=http://localhost:3000
 - `DISCORD_GUILD_ID`: コマンド登録先サーバーID。設定すると反映が速いギルドコマンドになります
 - `DATABASE_URL`: Neon などの Postgres 接続文字列。本番運用では設定推奨です
 - `DATABASE_PATH`: `DATABASE_URL` 未設定時の SQLite 保存先
-- `SCHEDULE_NOTIFY_ROLE_ID`: 日程調整開始時にメンションするロールID。未設定時は `@everyone` を使います
 - `DOCOSA_ROLE_ID`: 結果通知でメンションするロールID
 - `GOOGLE_MAPS_API_KEY`: 開催情報にGoogle Static Maps画像を表示する場合に設定
 - `POKEMON_PRODUCT_NOTIFY_CHANNEL_ID`: ポケモンセンターオンラインの商品追加通知先チャンネルID
 - `POKEMON_PRODUCT_CHECK_TIMES`: 商品チェック時刻。`BOT_TIMEZONE` 基準でカンマ区切り指定
 - `WEB_BASE_URL`: `/schedule` で返す WebUI のURL。Renderでは省略すると `RENDER_EXTERNAL_URL` を使います
+- `PERSONAL_GUILD_ID`: 個人口調と商品監視を許可する自分のサーバーID
+- `MAX_OPEN_POLLS_PER_GUILD`: サーバーごとの受付中アンケート上限
+- `CLOSED_POLL_RETENTION_DAYS`: 終了済みアンケートの保存日数
 
-`SCHEDULE_NOTIFY_ROLE_ID` や `DOCOSA_ROLE_ID` を使う場合、対象ロールがメンション可能になっているか、BOTに十分な権限があることを確認してください。
+通知ロールの初期値はDiscord上の `/schedule-settings` で設定します。
 
 ### 3. Discord Bot 権限
 
@@ -83,14 +85,13 @@ Bot に以下の権限を付けてサーバーへ招待します。
 - Read Message History
 - Manage Messages
 - Manage Threads
-- Mention Everyone
 - Use Slash Commands
 
 `Manage Messages` は、同じ候補日に複数リアクションが付いたとき、BOTが余分なリアクションを外すために必要です。
 `Create Public Threads` は、日程調整専用スレッドを自動作成するために必要です。
 `Send Messages in Threads` は、日程調整スレッド内へ候補日や結果を投稿するために必要です。
 `Manage Threads` は、アンケート削除時に日程調整スレッドごと片付けるために必要です。
-`Mention Everyone` は、開催情報の確定通知で `@everyone` を送るために必要です。
+全体メンションは送信しないため、`Mention Everyone` 権限は不要です。
 
 ### 4. コマンド登録
 
@@ -286,8 +287,8 @@ ID: poll_xxx
 完了メッセージ例:
 
 ```text
-@everyone
-開催情報が決定したぞー！みなのもの、要チェック！
+@設定した開催情報通知ロール
+開催情報が決定しました。内容をご確認ください。
 
 [埋め込み]
 右上サムネイル: カレンダーアイコン
@@ -327,3 +328,11 @@ ID: poll_xxx
 - UptimeRobot の監視先はDBへアクセスしない `/healthz` を使用してください
 - `DATABASE_URL` 未設定時は SQLite を使いますが、PaaS上では永続性に注意してください
 - 既存アンケートの表示文言は、作成時点のメッセージが残ります。表示確認は新しいアンケートで行ってください
+
+## 一般公開向け設定
+
+サーバー管理者は `/schedule-settings` でタイムゾーン、メッセージスタイル、各通知タイミングの初期ロール、個人用商品監視を設定できます。未設定のサーバーでは通知なし・標準スタイル・個人機能OFFで動作します。
+
+Web作成画面には、そのサーバーでメンション可能な通常ロールだけが表示されます。自由入力のメンション、`@everyone`、`@here` は送信しません。Web作成リンクはDBへハッシュ化して保存され、30分で失効します。
+
+公開前の確認事項は [限定公開チェックリスト](docs/PUBLIC_RELEASE_CHECKLIST.md)、データの扱いは [プライバシーポリシー](docs/PRIVACY.md)、利用条件は [利用規約](docs/TERMS.md) を参照してください。

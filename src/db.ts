@@ -12,6 +12,8 @@ import type {
   PollWithOptions,
   Vote,
   VoteStatus
+  , GuildSettings,
+  WebSession
 } from "./types.js";
 
 export type VoteBreakdown = {
@@ -88,7 +90,11 @@ function migrateSqlite(): void {
       creator_id TEXT NOT NULL,
       title TEXT NOT NULL,
       deadline TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
       notify_target TEXT,
+      initial_notify_role_id TEXT,
+      reminder_notify_role_id TEXT,
+      event_notify_role_id TEXT,
       multiple_choice INTEGER NOT NULL DEFAULT 1,
       anonymous INTEGER NOT NULL DEFAULT 0,
       reminder_minutes TEXT NOT NULL DEFAULT '[1440]',
@@ -135,6 +141,32 @@ function migrateSqlite(): void {
       last_seen_at TEXT NOT NULL,
       PRIMARY KEY (source_key, product_key)
     );
+
+    CREATE TABLE IF NOT EXISTS guild_settings (
+      guild_id TEXT PRIMARY KEY,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
+      message_style TEXT NOT NULL DEFAULT 'standard',
+      default_initial_notify_role_id TEXT,
+      default_reminder_notify_role_id TEXT,
+      default_result_notify_role_id TEXT,
+      default_event_notify_role_id TEXT,
+      allow_everyone_mentions INTEGER NOT NULL DEFAULT 0,
+      pokemon_watcher_enabled INTEGER NOT NULL DEFAULT 0,
+      pokemon_notify_channel_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS web_sessions (
+      token_hash TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      creator_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_web_sessions_expiry ON web_sessions(expires_at);
   `);
 
   ensureSqliteColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
@@ -143,6 +175,10 @@ function migrateSqlite(): void {
   ensureSqliteColumn("polls", "voter_message_id", "TEXT");
   ensureSqliteColumn("polls", "reminder_minutes", "TEXT NOT NULL DEFAULT '[1440]'");
   ensureSqliteColumn("polls", "reminded_minutes", "TEXT NOT NULL DEFAULT '[]'");
+  ensureSqliteColumn("polls", "initial_notify_role_id", "TEXT");
+  ensureSqliteColumn("polls", "reminder_notify_role_id", "TEXT");
+  ensureSqliteColumn("polls", "event_notify_role_id", "TEXT");
+  ensureSqliteColumn("polls", "timezone", "TEXT NOT NULL DEFAULT 'Asia/Tokyo'");
 }
 
 async function migratePostgres(): Promise<void> {
@@ -158,7 +194,11 @@ async function migratePostgres(): Promise<void> {
       creator_id TEXT NOT NULL,
       title TEXT NOT NULL,
       deadline TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
       notify_target TEXT,
+      initial_notify_role_id TEXT,
+      reminder_notify_role_id TEXT,
+      event_notify_role_id TEXT,
       multiple_choice BOOLEAN NOT NULL DEFAULT TRUE,
       anonymous BOOLEAN NOT NULL DEFAULT FALSE,
       reminder_minutes TEXT NOT NULL DEFAULT '[1440]',
@@ -205,6 +245,32 @@ async function migratePostgres(): Promise<void> {
       last_seen_at TEXT NOT NULL,
       PRIMARY KEY (source_key, product_key)
     );
+
+    CREATE TABLE IF NOT EXISTS guild_settings (
+      guild_id TEXT PRIMARY KEY,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Tokyo',
+      message_style TEXT NOT NULL DEFAULT 'standard',
+      default_initial_notify_role_id TEXT,
+      default_reminder_notify_role_id TEXT,
+      default_result_notify_role_id TEXT,
+      default_event_notify_role_id TEXT,
+      allow_everyone_mentions BOOLEAN NOT NULL DEFAULT FALSE,
+      pokemon_watcher_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      pokemon_notify_channel_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS web_sessions (
+      token_hash TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      creator_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_web_sessions_expiry ON web_sessions(expires_at);
   `);
 
   await ensurePostgresColumn("votes", "status", "TEXT NOT NULL DEFAULT 'yes'");
@@ -213,6 +279,10 @@ async function migratePostgres(): Promise<void> {
   await ensurePostgresColumn("polls", "voter_message_id", "TEXT");
   await ensurePostgresColumn("polls", "reminder_minutes", "TEXT NOT NULL DEFAULT '[1440]'");
   await ensurePostgresColumn("polls", "reminded_minutes", "TEXT NOT NULL DEFAULT '[]'");
+  await ensurePostgresColumn("polls", "initial_notify_role_id", "TEXT");
+  await ensurePostgresColumn("polls", "reminder_notify_role_id", "TEXT");
+  await ensurePostgresColumn("polls", "event_notify_role_id", "TEXT");
+  await ensurePostgresColumn("polls", "timezone", "TEXT NOT NULL DEFAULT 'Asia/Tokyo'");
 }
 
 function ensureSqliteColumn(table: string, column: string, definition: string): void {
@@ -248,7 +318,11 @@ function mapPoll(row: Record<string, unknown>): Poll {
     creatorId: String(row.creator_id),
     title: String(row.title),
     deadline: String(row.deadline),
+    timezone: row.timezone ? String(row.timezone) : "Asia/Tokyo",
     notifyTarget: row.notify_target ? String(row.notify_target) : null,
+    initialNotifyRoleId: row.initial_notify_role_id ? String(row.initial_notify_role_id) : null,
+    reminderNotifyRoleId: row.reminder_notify_role_id ? String(row.reminder_notify_role_id) : null,
+    eventNotifyRoleId: row.event_notify_role_id ? String(row.event_notify_role_id) : null,
     multipleChoice: toBoolean(row.multiple_choice),
     anonymous: toBoolean(row.anonymous),
     reminderMinutes: row.reminder_minutes ? String(row.reminder_minutes) : "[1440]",
@@ -305,7 +379,11 @@ function pollValues(poll: Poll): unknown[] {
     poll.creatorId,
     poll.title,
     poll.deadline,
+    poll.timezone,
     poll.notifyTarget,
+    poll.initialNotifyRoleId,
+    poll.reminderNotifyRoleId,
+    poll.eventNotifyRoleId,
     poll.multipleChoice,
     poll.anonymous,
     poll.reminderMinutes,
@@ -338,11 +416,12 @@ export async function createPoll(poll: Poll, options: PollOption[]): Promise<voi
       await client.query(
         `
           INSERT INTO polls (
-            id, guild_id, channel_id, parent_channel_id, message_id, voter_message_id, creator_id, title, deadline,
-            notify_target, multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
+            id, guild_id, channel_id, parent_channel_id, message_id, voter_message_id, creator_id, title, deadline, timezone,
+            notify_target, initial_notify_role_id, reminder_notify_role_id, event_notify_role_id,
+            multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
             created_at, closed_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
         `,
         pollValues(poll)
       );
@@ -362,13 +441,15 @@ export async function createPoll(poll: Poll, options: PollOption[]): Promise<voi
   const db = getSqlite();
   const insertPoll = db.prepare(`
     INSERT INTO polls (
-      id, guild_id, channel_id, parent_channel_id, message_id, voter_message_id, creator_id, title, deadline,
-      notify_target, multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
+      id, guild_id, channel_id, parent_channel_id, message_id, voter_message_id, creator_id, title, deadline, timezone,
+      notify_target, initial_notify_role_id, reminder_notify_role_id, event_notify_role_id,
+      multiple_choice, anonymous, reminder_minutes, reminded_minutes, status, reminded_hours,
       created_at, closed_at
     )
     VALUES (
-      @id, @guildId, @channelId, @parentChannelId, @messageId, @voterMessageId, @creatorId, @title, @deadline,
-      @notifyTarget, @multipleChoice, @anonymous, @reminderMinutes, @remindedMinutes, @status, @remindedHours,
+      @id, @guildId, @channelId, @parentChannelId, @messageId, @voterMessageId, @creatorId, @title, @deadline, @timezone,
+      @notifyTarget, @initialNotifyRoleId, @reminderNotifyRoleId, @eventNotifyRoleId,
+      @multipleChoice, @anonymous, @reminderMinutes, @remindedMinutes, @status, @remindedHours,
       @createdAt, @closedAt
     )
   `);
@@ -437,6 +518,39 @@ export async function getPoll(pollId: string): Promise<PollWithOptions | null> {
     ...mapPoll(pollRow),
     options: optionRows.map(mapOption)
   };
+}
+
+export async function getPollForGuild(pollId: string, guildId: string): Promise<PollWithOptions | null> {
+  const poll = await getPoll(pollId);
+  return poll?.guildId === guildId ? poll : null;
+}
+
+export async function countOpenPollsForGuild(guildId: string): Promise<number> {
+  if (usePostgres()) {
+    const result = await getPostgresPool().query(
+      "SELECT COUNT(*) AS count FROM polls WHERE guild_id = $1 AND status = 'open'",
+      [guildId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+  const row = getSqlite()
+    .prepare("SELECT COUNT(*) AS count FROM polls WHERE guild_id = ? AND status = 'open'")
+    .get(guildId) as { count: number };
+  return Number(row.count);
+}
+
+export async function getLatestPollCreatedAt(guildId: string): Promise<string | null> {
+  if (usePostgres()) {
+    const result = await getPostgresPool().query(
+      "SELECT created_at FROM polls WHERE guild_id = $1 ORDER BY created_at DESC LIMIT 1",
+      [guildId]
+    );
+    return result.rows[0]?.created_at ? String(result.rows[0].created_at) : null;
+  }
+  const row = getSqlite()
+    .prepare("SELECT created_at FROM polls WHERE guild_id = ? ORDER BY created_at DESC LIMIT 1")
+    .get(guildId) as { created_at: string } | undefined;
+  return row?.created_at ?? null;
 }
 
 export async function getPollByMessage(messageId: string): Promise<{ poll: PollWithOptions; option: PollOption } | null> {
@@ -725,4 +839,191 @@ export async function recordPokemonProductSnapshot(sourceKey: string, products: 
   }
 
   return isInitialSnapshot ? [] : newProducts;
+}
+
+const DEFAULT_GUILD_SETTINGS = {
+  timezone: "Asia/Tokyo",
+  messageStyle: "standard" as const,
+  defaultInitialNotifyRoleId: null,
+  defaultReminderNotifyRoleId: null,
+  defaultResultNotifyRoleId: null,
+  defaultEventNotifyRoleId: null,
+  allowEveryoneMentions: false,
+  pokemonWatcherEnabled: false,
+  pokemonNotifyChannelId: null
+};
+
+function mapGuildSettings(row: Record<string, unknown>): GuildSettings {
+  return {
+    guildId: String(row.guild_id),
+    timezone: String(row.timezone),
+    messageStyle: row.message_style === "personal" ? "personal" : "standard",
+    defaultInitialNotifyRoleId: row.default_initial_notify_role_id ? String(row.default_initial_notify_role_id) : null,
+    defaultReminderNotifyRoleId: row.default_reminder_notify_role_id ? String(row.default_reminder_notify_role_id) : null,
+    defaultResultNotifyRoleId: row.default_result_notify_role_id ? String(row.default_result_notify_role_id) : null,
+    defaultEventNotifyRoleId: row.default_event_notify_role_id ? String(row.default_event_notify_role_id) : null,
+    allowEveryoneMentions: toBoolean(row.allow_everyone_mentions),
+    pokemonWatcherEnabled: toBoolean(row.pokemon_watcher_enabled),
+    pokemonNotifyChannelId: row.pokemon_notify_channel_id ? String(row.pokemon_notify_channel_id) : null,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+export async function getGuildSettings(guildId: string): Promise<GuildSettings> {
+  const row = usePostgres()
+    ? (await getPostgresPool().query("SELECT * FROM guild_settings WHERE guild_id = $1", [guildId])).rows[0]
+    : (getSqlite().prepare("SELECT * FROM guild_settings WHERE guild_id = ?").get(guildId) as Record<string, unknown> | undefined);
+  const now = new Date().toISOString();
+  return row ? mapGuildSettings(row) : { guildId, ...DEFAULT_GUILD_SETTINGS, createdAt: now, updatedAt: now };
+}
+
+export async function hasGuildSettings(guildId: string): Promise<boolean> {
+  if (usePostgres()) {
+    const result = await getPostgresPool().query("SELECT 1 FROM guild_settings WHERE guild_id = $1", [guildId]);
+    return (result.rowCount ?? 0) > 0;
+  }
+  return Boolean(getSqlite().prepare("SELECT 1 FROM guild_settings WHERE guild_id = ?").get(guildId));
+}
+
+export async function saveGuildSettings(settings: GuildSettings): Promise<void> {
+  const values = [
+    settings.guildId,
+    settings.timezone,
+    settings.messageStyle,
+    settings.defaultInitialNotifyRoleId,
+    settings.defaultReminderNotifyRoleId,
+    settings.defaultResultNotifyRoleId,
+    settings.defaultEventNotifyRoleId,
+    settings.allowEveryoneMentions,
+    settings.pokemonWatcherEnabled,
+    settings.pokemonNotifyChannelId,
+    settings.createdAt,
+    settings.updatedAt
+  ];
+  if (usePostgres()) {
+    await getPostgresPool().query(
+      `INSERT INTO guild_settings (
+        guild_id, timezone, message_style, default_initial_notify_role_id, default_reminder_notify_role_id,
+        default_result_notify_role_id, default_event_notify_role_id, allow_everyone_mentions,
+        pokemon_watcher_enabled, pokemon_notify_channel_id, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ON CONFLICT (guild_id) DO UPDATE SET
+        timezone=EXCLUDED.timezone, message_style=EXCLUDED.message_style,
+        default_initial_notify_role_id=EXCLUDED.default_initial_notify_role_id,
+        default_reminder_notify_role_id=EXCLUDED.default_reminder_notify_role_id,
+        default_result_notify_role_id=EXCLUDED.default_result_notify_role_id,
+        default_event_notify_role_id=EXCLUDED.default_event_notify_role_id,
+        allow_everyone_mentions=EXCLUDED.allow_everyone_mentions,
+        pokemon_watcher_enabled=EXCLUDED.pokemon_watcher_enabled,
+        pokemon_notify_channel_id=EXCLUDED.pokemon_notify_channel_id, updated_at=EXCLUDED.updated_at`,
+      values
+    );
+    return;
+  }
+  getSqlite().prepare(
+    `INSERT INTO guild_settings (
+      guild_id, timezone, message_style, default_initial_notify_role_id, default_reminder_notify_role_id,
+      default_result_notify_role_id, default_event_notify_role_id, allow_everyone_mentions,
+      pokemon_watcher_enabled, pokemon_notify_channel_id, created_at, updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(guild_id) DO UPDATE SET
+      timezone=excluded.timezone, message_style=excluded.message_style,
+      default_initial_notify_role_id=excluded.default_initial_notify_role_id,
+      default_reminder_notify_role_id=excluded.default_reminder_notify_role_id,
+      default_result_notify_role_id=excluded.default_result_notify_role_id,
+      default_event_notify_role_id=excluded.default_event_notify_role_id,
+      allow_everyone_mentions=excluded.allow_everyone_mentions,
+      pokemon_watcher_enabled=excluded.pokemon_watcher_enabled,
+      pokemon_notify_channel_id=excluded.pokemon_notify_channel_id, updated_at=excluded.updated_at`
+  ).run(...values.map((value) => typeof value === "boolean" ? (value ? 1 : 0) : value));
+}
+
+export async function createWebSessionRecord(session: WebSession): Promise<void> {
+  const values = [session.tokenHash, session.guildId, session.channelId, session.creatorId, session.expiresAt, session.consumedAt, session.createdAt];
+  if (usePostgres()) {
+    await getPostgresPool().query(
+      "INSERT INTO web_sessions (token_hash,guild_id,channel_id,creator_id,expires_at,consumed_at,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      values
+    );
+    return;
+  }
+  getSqlite().prepare(
+    "INSERT INTO web_sessions (token_hash,guild_id,channel_id,creator_id,expires_at,consumed_at,created_at) VALUES (?,?,?,?,?,?,?)"
+  ).run(...values);
+}
+
+export async function getActiveWebSessionRecord(tokenHash: string): Promise<WebSession | null> {
+  const now = new Date().toISOString();
+  const row = usePostgres()
+    ? (await getPostgresPool().query(
+        "SELECT * FROM web_sessions WHERE token_hash=$1 AND consumed_at IS NULL AND expires_at>$2",
+        [tokenHash, now]
+      )).rows[0]
+    : (getSqlite().prepare(
+        "SELECT * FROM web_sessions WHERE token_hash=? AND consumed_at IS NULL AND expires_at>?"
+      ).get(tokenHash, now) as Record<string, unknown> | undefined);
+  if (!row) return null;
+  return {
+    tokenHash: String(row.token_hash),
+    guildId: String(row.guild_id),
+    channelId: String(row.channel_id),
+    creatorId: String(row.creator_id),
+    expiresAt: String(row.expires_at),
+    consumedAt: row.consumed_at ? String(row.consumed_at) : null,
+    createdAt: String(row.created_at)
+  };
+}
+
+export async function consumeWebSessionRecord(tokenHash: string): Promise<boolean> {
+  const now = new Date().toISOString();
+  if (usePostgres()) {
+    const result = await getPostgresPool().query(
+      "UPDATE web_sessions SET consumed_at=$1 WHERE token_hash=$2 AND consumed_at IS NULL AND expires_at>$1",
+      [now, tokenHash]
+    );
+    return (result.rowCount ?? 0) === 1;
+  }
+  return getSqlite().prepare(
+    "UPDATE web_sessions SET consumed_at=? WHERE token_hash=? AND consumed_at IS NULL AND expires_at>?"
+  ).run(now, tokenHash, now).changes === 1;
+}
+
+export async function cleanupExpiredData(closedBeforeIso: string): Promise<{ polls: number; sessions: number }> {
+  const now = new Date().toISOString();
+  if (usePostgres()) {
+    const polls = await getPostgresPool().query(
+      "DELETE FROM polls WHERE status <> 'open' AND COALESCE(closed_at, created_at) < $1",
+      [closedBeforeIso]
+    );
+    const sessions = await getPostgresPool().query(
+      "DELETE FROM web_sessions WHERE expires_at < $1 OR consumed_at IS NOT NULL",
+      [now]
+    );
+    return { polls: polls.rowCount ?? 0, sessions: sessions.rowCount ?? 0 };
+  }
+  const polls = getSqlite().prepare(
+    "DELETE FROM polls WHERE status <> 'open' AND COALESCE(closed_at, created_at) < ?"
+  ).run(closedBeforeIso).changes;
+  const sessions = getSqlite().prepare(
+    "DELETE FROM web_sessions WHERE expires_at < ? OR consumed_at IS NOT NULL"
+  ).run(now).changes;
+  return { polls, sessions };
+}
+
+export async function deleteGuildData(guildId: string): Promise<{ polls: number; sessions: number; settings: number }> {
+  if (usePostgres()) {
+    return withPostgresTransaction(async (client) => {
+      const polls = await client.query("DELETE FROM polls WHERE guild_id = $1", [guildId]);
+      const sessions = await client.query("DELETE FROM web_sessions WHERE guild_id = $1", [guildId]);
+      const settings = await client.query("DELETE FROM guild_settings WHERE guild_id = $1", [guildId]);
+      return { polls: polls.rowCount ?? 0, sessions: sessions.rowCount ?? 0, settings: settings.rowCount ?? 0 };
+    });
+  }
+  return getSqlite().transaction(() => {
+    const polls = getSqlite().prepare("DELETE FROM polls WHERE guild_id = ?").run(guildId).changes;
+    const sessions = getSqlite().prepare("DELETE FROM web_sessions WHERE guild_id = ?").run(guildId).changes;
+    const settings = getSqlite().prepare("DELETE FROM guild_settings WHERE guild_id = ?").run(guildId).changes;
+    return { polls, sessions, settings };
+  })();
 }

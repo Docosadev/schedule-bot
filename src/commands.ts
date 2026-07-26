@@ -1,10 +1,11 @@
 import {
   ChatInputCommandInteraction,
+  ChannelType,
   PermissionFlagsBits,
   SlashCommandBuilder
 } from "discord.js";
 import { config } from "./config.js";
-import { getOpenPolls, getPoll } from "./db.js";
+import { deleteGuildData, getGuildSettings, getOpenPolls, getPollForGuild, saveGuildSettings } from "./db.js";
 import { handleCreateEventCommand } from "./eventService.js";
 import {
   closePollByCommand,
@@ -102,7 +103,47 @@ export const createEventCommand = new SlashCommandBuilder()
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
-export const commands = [scheduleCommand.toJSON(), scheduleAdminCommand.toJSON(), createEventCommand.toJSON()];
+export const scheduleSettingsCommand = new SlashCommandBuilder()
+  .setName("schedule-settings")
+  .setDescription("このサーバーの日程調整設定を管理します")
+  .addSubcommand((subcommand) => subcommand.setName("show").setDescription("現在の設定を表示します"))
+  .addSubcommand((subcommand) =>
+    subcommand.setName("timezone").setDescription("タイムゾーンを変更します")
+      .addStringOption((option) => option.setName("value").setDescription("例: Asia/Tokyo").setRequired(true).setMaxLength(64))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("style").setDescription("メッセージスタイルを変更します")
+      .addStringOption((option) => option.setName("value").setDescription("スタイル").setRequired(true)
+        .addChoices({ name: "標準", value: "standard" }, { name: "個人", value: "personal" }))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("notify-role").setDescription("通知の初期ロールを変更します")
+      .addStringOption((option) => option.setName("timing").setDescription("通知タイミング").setRequired(true)
+        .addChoices(
+          { name: "初回投稿", value: "initial" },
+          { name: "締切前リマインド", value: "reminder" },
+          { name: "締切・集計結果", value: "result" },
+          { name: "開催情報", value: "event" }
+        ))
+      .addRoleOption((option) => option.setName("role").setDescription("省略するとメンションなし").setRequired(false))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("pokemon-watcher").setDescription("個人用の商品監視を設定します")
+      .addBooleanOption((option) => option.setName("enabled").setDescription("有効にするか").setRequired(true))
+      .addChannelOption((option) => option.setName("channel").setDescription("通知先").addChannelTypes(ChannelType.GuildText))
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName("delete-data").setDescription("このサーバーの保存データを削除します")
+      .addStringOption((option) => option.setName("confirm").setDescription("確認のため DELETE と入力").setRequired(true))
+  )
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+
+export const commands = [
+  scheduleCommand.toJSON(),
+  scheduleAdminCommand.toJSON(),
+  createEventCommand.toJSON(),
+  scheduleSettingsCommand.toJSON()
+];
 
 export async function handleScheduleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId || !interaction.channelId) {
@@ -110,7 +151,7 @@ export async function handleScheduleCommand(interaction: ChatInputCommandInterac
     return;
   }
 
-  const session = createWebSession({
+  const session = await createWebSession({
     guildId: interaction.guildId,
     channelId: interaction.channelId,
     creatorId: interaction.user.id
@@ -142,7 +183,7 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
 
   if (subcommand === "show") {
     const pollId = interaction.options.getString("poll_id", true);
-    const poll = await getPoll(pollId);
+    const poll = interaction.guildId ? await getPollForGuild(pollId, interaction.guildId) : null;
     if (!poll) {
       await interaction.reply({ content: "指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！", ephemeral: true });
       return;
@@ -153,12 +194,12 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
 
   if (subcommand === "voters") {
     const pollId = interaction.options.getString("poll_id", true);
-    const poll = await getPoll(pollId);
+    const poll = interaction.guildId ? await getPollForGuild(pollId, interaction.guildId) : null;
     if (!poll) {
       await interaction.reply({ content: "指定されたアンケートが見つからないぞー！IDをもう一度チェックしてね！", ephemeral: true });
       return;
     }
-    await interaction.reply({ content: await buildVoterList(poll), ephemeral: true });
+    await interaction.reply({ content: await buildVoterList(poll), allowedMentions: { parse: [] }, ephemeral: true });
     return;
   }
 
@@ -184,4 +225,84 @@ export async function handleScheduleAdminCommand(interaction: ChatInputCommandIn
 
 export async function handleCreateEventSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   await handleCreateEventCommand(interaction);
+}
+
+export async function handleScheduleSettingsCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!interaction.guildId || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "この設定はサーバー管理権限を持つ人だけが変更できます。", ephemeral: true });
+    return;
+  }
+  const settings = await getGuildSettings(interaction.guildId);
+  const subcommand = interaction.options.getSubcommand();
+  if (subcommand === "show") {
+    await interaction.reply({
+      content: [
+        `タイムゾーン: ${settings.timezone}`,
+        `メッセージスタイル: ${settings.messageStyle}`,
+        `初回通知: ${settings.defaultInitialNotifyRoleId ? `<@&${settings.defaultInitialNotifyRoleId}>` : "なし"}`,
+        `リマインド通知: ${settings.defaultReminderNotifyRoleId ? `<@&${settings.defaultReminderNotifyRoleId}>` : "なし"}`,
+        `結果通知: ${settings.defaultResultNotifyRoleId ? `<@&${settings.defaultResultNotifyRoleId}>` : "なし"}`,
+        `開催情報通知: ${settings.defaultEventNotifyRoleId ? `<@&${settings.defaultEventNotifyRoleId}>` : "なし"}`,
+        `個人用商品監視: ${settings.pokemonWatcherEnabled ? "ON" : "OFF"}`
+      ].join("\n"),
+      allowedMentions: { parse: [] },
+      ephemeral: true
+    });
+    return;
+  }
+  if (subcommand === "timezone") {
+    const timezone = interaction.options.getString("value", true).trim();
+    try {
+      new Intl.DateTimeFormat("ja-JP", { timeZone: timezone }).format();
+    } catch {
+      await interaction.reply({ content: "有効なIANAタイムゾーンを指定してください（例: Asia/Tokyo）。", ephemeral: true });
+      return;
+    }
+    settings.timezone = timezone;
+  } else if (subcommand === "style") {
+    const style = interaction.options.getString("value", true) as "standard" | "personal";
+    if (style === "personal" && interaction.guildId !== config.personalGuildId) {
+      await interaction.reply({ content: "個人スタイルは許可された個人サーバーでのみ有効にできます。", ephemeral: true });
+      return;
+    }
+    settings.messageStyle = style;
+  } else if (subcommand === "notify-role") {
+    const timing = interaction.options.getString("timing", true);
+    const role = interaction.options.getRole("role");
+    if (role && (role.managed || role.id === interaction.guildId || !role.mentionable)) {
+      await interaction.reply({ content: "通知可能な通常ロールを選んでください。", ephemeral: true });
+      return;
+    }
+    if (timing === "initial") settings.defaultInitialNotifyRoleId = role?.id ?? null;
+    if (timing === "reminder") settings.defaultReminderNotifyRoleId = role?.id ?? null;
+    if (timing === "result") settings.defaultResultNotifyRoleId = role?.id ?? null;
+    if (timing === "event") settings.defaultEventNotifyRoleId = role?.id ?? null;
+  } else if (subcommand === "pokemon-watcher") {
+    if (interaction.guildId !== config.personalGuildId) {
+      await interaction.reply({ content: "商品監視は許可された個人サーバーでのみ設定できます。", ephemeral: true });
+      return;
+    }
+    const enabled = interaction.options.getBoolean("enabled", true);
+    const channel = interaction.options.getChannel("channel");
+    if (enabled && !channel) {
+      await interaction.reply({ content: "有効にする場合は通知先チャンネルを指定してください。", ephemeral: true });
+      return;
+    }
+    settings.pokemonWatcherEnabled = enabled;
+    settings.pokemonNotifyChannelId = enabled ? channel!.id : null;
+  } else if (subcommand === "delete-data") {
+    if (interaction.options.getString("confirm", true) !== "DELETE") {
+      await interaction.reply({ content: "削除を確定するには `DELETE` と正確に入力してください。", ephemeral: true });
+      return;
+    }
+    const deleted = await deleteGuildData(interaction.guildId);
+    await interaction.reply({
+      content: `このサーバーの保存データを削除しました（アンケート ${deleted.polls}件、作成リンク ${deleted.sessions}件、設定 ${deleted.settings}件）。Discord上の既存メッセージは削除されません。`,
+      ephemeral: true
+    });
+    return;
+  }
+  settings.updatedAt = new Date().toISOString();
+  await saveGuildSettings(settings);
+  await interaction.reply({ content: "サーバー設定を更新しました。", ephemeral: true });
 }

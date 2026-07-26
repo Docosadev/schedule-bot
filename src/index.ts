@@ -5,9 +5,14 @@ import {
   MessageFlags,
   Partials
 } from "discord.js";
-import { handleCreateEventSlashCommand, handleScheduleAdminCommand, handleScheduleCommand } from "./commands.js";
+import {
+  handleCreateEventSlashCommand,
+  handleScheduleAdminCommand,
+  handleScheduleCommand,
+  handleScheduleSettingsCommand
+} from "./commands.js";
 import { config } from "./config.js";
-import { migrate } from "./db.js";
+import { getGuildSettings, hasGuildSettings, migrate, saveGuildSettings } from "./db.js";
 import { handleCreateEventSelection } from "./eventService.js";
 import { handleReactionAdd, handleReactionRemove } from "./pollService.js";
 import { startPokemonProductScheduler } from "./pokemonProductWatcher.js";
@@ -15,6 +20,14 @@ import { startPollScheduler } from "./pollScheduler.js";
 import { startWebServer } from "./webServer.js";
 
 await migrate();
+if (config.personalGuildId && !(await hasGuildSettings(config.personalGuildId))) {
+  const personalSettings = await getGuildSettings(config.personalGuildId);
+  personalSettings.messageStyle = "personal";
+  personalSettings.pokemonWatcherEnabled = Boolean(config.pokemonProductNotifyChannelId);
+  personalSettings.pokemonNotifyChannelId = config.pokemonProductNotifyChannelId ?? null;
+  personalSettings.updatedAt = new Date().toISOString();
+  await saveGuildSettings(personalSettings);
+}
 
 const client = new Client({
   intents: [
@@ -54,6 +67,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     if (interaction.commandName === "create-event") {
       await handleCreateEventSlashCommand(interaction);
+      return;
+    }
+    if (interaction.commandName === "schedule-settings") {
+      await handleScheduleSettingsCommand(interaction);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "むむっ！？予期せぬエラーが発生したぞよ！";

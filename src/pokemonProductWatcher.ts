@@ -2,7 +2,7 @@ import { EmbedBuilder, type GuildTextBasedChannel } from "discord.js";
 import { addDays, format } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import { config } from "./config.js";
-import { recordPokemonProductSnapshot } from "./db.js";
+import { getGuildSettings, recordPokemonProductSnapshot } from "./db.js";
 import { isGuildTextChannel } from "./pollService.js";
 import type { PokemonProductInput } from "./types.js";
 
@@ -218,13 +218,15 @@ async function notifyNewProducts(channel: GuildTextBasedChannel, source: Product
 }
 
 export async function checkPokemonProducts(clientChannelsFetch: (channelId: string) => Promise<unknown>): Promise<void> {
-  const channelId = config.pokemonProductNotifyChannelId;
-  if (!channelId) {
+  if (!config.personalGuildId) {
     return;
   }
+  const settings = await getGuildSettings(config.personalGuildId);
+  const channelId = settings.pokemonWatcherEnabled ? settings.pokemonNotifyChannelId : null;
+  if (!channelId) return;
 
   const channel = await clientChannelsFetch(channelId).catch(() => null);
-  if (!isGuildTextChannel(channel)) {
+  if (!isGuildTextChannel(channel) || channel.guild.id !== config.personalGuildId) {
     console.warn("pokemon product notify channel was not found or is not text-based", { channelId });
     return;
   }
@@ -248,7 +250,7 @@ export async function checkPokemonProducts(clientChannelsFetch: (channelId: stri
 }
 
 export function startPokemonProductScheduler(clientChannelsFetch: (channelId: string) => Promise<unknown>): void {
-  if (!config.pokemonProductNotifyChannelId) {
+  if (!config.personalGuildId) {
     return;
   }
 
