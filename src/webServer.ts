@@ -1,7 +1,12 @@
 import { PermissionFlagsBits, type Client } from "discord.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
-import { getGuildSettings } from "./db.js";
+import {
+  EVERYONE_NOTIFICATION_TARGET,
+  formatNotificationTarget,
+  HERE_NOTIFICATION_TARGET,
+  isBroadcastNotificationTarget
+} from "./notificationMentions.js";
 import { isGuildTextChannel, publishSchedulePoll } from "./pollService.js";
 import { REMINDER_CHOICES, normalizeReminderMinutes } from "./reminders.js";
 import { consumeWebSession, getWebSession } from "./webSessions.js";
@@ -49,30 +54,44 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
     const guild = await client.guilds.fetch(session.guildId).catch(() => null);
     const channel = await client.channels.fetch(session.channelId).catch(() => null);
     const botMember = guild?.members.me ?? await guild?.members.fetchMe().catch(() => null);
-    const canMentionEveryRole = Boolean(
+    const creatorMember = guild ? await guild.members.fetch(session.creatorId).catch(() => null) : null;
+    const botCanMentionEveryRole = Boolean(
       guild &&
       botMember &&
       isGuildTextChannel(channel) &&
       channel.guild.id === guild.id &&
       channel.permissionsFor(botMember)?.has(PermissionFlagsBits.MentionEveryone)
     );
-    const roles = guild
+    const canUseBroadcastMentions = Boolean(
+      guild &&
+      creatorMember &&
+      isGuildTextChannel(channel) &&
+      channel.guild.id === guild.id &&
+      channel.permissionsFor(creatorMember)?.has(PermissionFlagsBits.MentionEveryone)
+    ) && botCanMentionEveryRole;
+    const normalRoles = guild
       ? [...(await guild.roles.fetch().catch(() => new Map())).values()]
           .filter((role) =>
             role &&
             role.id !== guild.id &&
             !role.managed &&
-            (role.mentionable || canMentionEveryRole)
+            (role.mentionable || botCanMentionEveryRole)
           )
           .map((role) => ({ id: role!.id, name: role!.name }))
           .sort((a, b) => a.name.localeCompare(b.name, "ja"))
       : [];
-    const settings = await getGuildSettings(session.guildId);
+    const roles = canUseBroadcastMentions
+      ? [
+          { id: EVERYONE_NOTIFICATION_TARGET, name: "everyone" },
+          { id: HERE_NOTIFICATION_TARGET, name: "here" },
+          ...normalRoles
+        ]
+      : normalRoles;
     sendHtml(response, 200, renderCreatePage(token, roles, {
-      initial: settings.defaultInitialNotifyRoleId,
-      reminder: settings.defaultReminderNotifyRoleId,
-      result: settings.defaultResultNotifyRoleId,
-      event: settings.defaultEventNotifyRoleId
+      initial: null,
+      reminder: null,
+      result: null,
+      event: null
     }));
     return;
   }
@@ -140,16 +159,23 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
     }
     const guildRoles = await channel.guild.roles.fetch();
     const botMember = channel.guild.members.me ?? await channel.guild.members.fetchMe().catch(() => null);
-    const canMentionEveryRole = Boolean(
+    const creatorMember = await channel.guild.members.fetch(session.creatorId).catch(() => null);
+    const botCanMentionEveryRole = Boolean(
       botMember && channel.permissionsFor(botMember)?.has(PermissionFlagsBits.MentionEveryone)
     );
+    const canUseBroadcastMentions = Boolean(
+      creatorMember && channel.permissionsFor(creatorMember)?.has(PermissionFlagsBits.MentionEveryone)
+    ) && botCanMentionEveryRole;
     const validateRole = (roleId: string | null): string | null => {
       if (!roleId) return null;
+      if (isBroadcastNotificationTarget(roleId)) {
+        return canUseBroadcastMentions ? roleId : null;
+      }
       const role = guildRoles.get(roleId);
       return role &&
         role.guild.id === session.guildId &&
         !role.managed &&
-        (role.mentionable || canMentionEveryRole)
+        (role.mentionable || botCanMentionEveryRole)
         ? role.id
         : null;
     };
@@ -175,7 +201,7 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
       deadlineInput,
       candidateEndTime,
       reminderMinutes,
-      notifyTarget: validatedRoles.result ? `<@&${validatedRoles.result}>` : null,
+      notifyTarget: formatNotificationTarget(validatedRoles.result),
       initialNotifyRoleId: validatedRoles.initial,
       reminderNotifyRoleId: validatedRoles.reminder,
       eventNotifyRoleId: validatedRoles.event,
@@ -358,7 +384,7 @@ function renderCreatePage(
               <label>締切前リマインド<select id="reminderNotifyRoleId">${roleOptions(defaults.reminder)}</select></label>
               <label>締切・集計結果<select id="resultNotifyRoleId">${roleOptions(defaults.result)}</select></label>
               <label>開催情報<select id="eventNotifyRoleId">${roleOptions(defaults.event)}</select></label>
-              <p class="hint">通知可能として設定されたロールだけを表示しています。</p>
+              <p class="hint">Botが通知できるロールを表示しています。一斉メンション権限がある場合は @everyone と @here も選択できます。</p>
             </section>
 
             <div class="actions">

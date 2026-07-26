@@ -7,6 +7,7 @@ import {
   LabelBuilder,
   Message,
   MessageFlags,
+  type MessageMentionOptions,
   ModalBuilder,
   ModalSubmitInteraction,
   PermissionFlagsBits,
@@ -20,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { config } from "./config.js";
 import { parseLocalDateTime } from "./dateUtils.js";
+import { resolveNotificationMention } from "./notificationMentions.js";
 
 type EventCandidate = {
   label: string;
@@ -310,7 +312,7 @@ async function createFromCandidate(
   content: string;
   embeds: EmbedBuilder[];
   files: AttachmentBuilder[];
-  allowedMentions: { parse: []; roles?: string[] };
+  allowedMentions: MessageMentionOptions;
 }> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
     throw new Error("このコマンドはサーバー内で実行してください。");
@@ -318,21 +320,14 @@ async function createFromCandidate(
 
   const settings = await getGuildSettings(interaction.guildId);
   const poll = state.pollId ? await getPollForGuild(state.pollId, interaction.guildId) : null;
-  const roleId = poll?.eventNotifyRoleId ?? settings.defaultEventNotifyRoleId;
-  const role = roleId
-    ? await interaction.guild.roles.fetch(roleId).catch(() => null)
-    : null;
-  const canMentionRole = Boolean(
-    role &&
-    !role.managed &&
-    (role.mentionable || interaction.appPermissions?.has(PermissionFlagsBits.MentionEveryone))
-  );
-  const mention = canMentionRole && role ? `<@&${role.id}>\n` : "";
+  const target = poll?.eventNotifyRoleId ?? settings.defaultEventNotifyRoleId;
+  const notification = await resolveNotificationMention(resolveEventInfoOutputChannel(interaction), target);
+  const mention = notification.mention ? `${notification.mention}\n` : "";
   return {
     content: `${mention}開催情報が決定しました。内容をご確認ください。`,
     embeds: [buildEventInfoEmbed(state, candidate)],
     files: [buildEventThumbnailAttachment()],
-    allowedMentions: canMentionRole && role ? { parse: [], roles: [role.id] } : { parse: [] }
+    allowedMentions: notification.allowedMentions
   };
 }
 

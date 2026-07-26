@@ -39,6 +39,7 @@ import { formatDeadline, formatOptionLabel, parseDateList, parseLocalDateTime } 
 import { formatRemainingTime, normalizeReminderMinutes, parseReminderMinutesJson } from "./reminders.js";
 import { buildOptionMessage, buildPollHeaderMessage, buildResultMessage, buildVotedMembersMessage } from "./render.js";
 import { buildResultMatrixImage, type MatrixParticipant } from "./resultImage.js";
+import { resolveNotificationMention } from "./notificationMentions.js";
 import { requestPollScheduleRefresh } from "./schedulerHooks.js";
 import type { Poll, PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { statusFromEmoji, VOTE_EMOJIS } from "./voteEmojis.js";
@@ -243,14 +244,11 @@ export async function publishSchedulePoll(
       throw new Error("アンケートの保存に失敗しました。");
     }
 
-    const initialRole = savedPoll.initialNotifyRoleId
-      ? await thread.guild.roles.fetch(savedPoll.initialNotifyRoleId).catch(() => null)
-      : null;
-    const notifyMention = initialRole && initialRole.guild.id === savedPoll.guildId ? `<@&${initialRole.id}>` : "";
+    const initialNotification = await resolveNotificationMention(thread, savedPoll.initialNotifyRoleId);
     const personal = guildSettings.messageStyle === "personal";
     const headerMessage = await thread.send({
-      content: buildPollHeaderMessage(savedPoll, notifyMention, personal),
-      allowedMentions: initialRole ? { roles: [initialRole.id], parse: [] } : { parse: [] }
+      content: buildPollHeaderMessage(savedPoll, initialNotification.mention, personal),
+      allowedMentions: initialNotification.allowedMentions
     });
     sentMessages.push(headerMessage);
     await updatePollMessageId(poll.id, headerMessage.id);
@@ -505,14 +503,13 @@ export async function closeAndReportPoll(channel: GuildTextBasedChannel, poll: P
   const syncedPoll = await syncVotesFromDiscord(channel, poll);
   await closePoll(syncedPoll.id, "closed");
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
-  const resultRoleId = closedPoll.notifyTarget?.match(/^<@&(\d{17,20})>$/)?.[1] ?? null;
-  const resultRole = resultRoleId ? await channel.guild.roles.fetch(resultRoleId).catch(() => null) : null;
+  const resultNotification = await resolveNotificationMention(channel, closedPoll.notifyTarget);
   const docosaMention = config.personalGuildId === closedPoll.guildId ? await resolveDocosaMention(channel.guild) : "";
   const matrixAttachment = await buildResultMatrixAttachment(channel, closedPoll);
   await channel.send({
-    content: await buildResultMessage(closedPoll, docosaMention),
+    content: await buildResultMessage(closedPoll, docosaMention, resultNotification.mention),
     files: matrixAttachment ? [matrixAttachment] : [],
-    allowedMentions: resultRole ? { parse: [], roles: [resultRole.id] } : { parse: [] }
+    allowedMentions: resultNotification.allowedMentions
   });
 }
 
@@ -583,13 +580,11 @@ export async function checkReminders(clientChannelsFetch: (channelId: string) =>
     const newlyRemindedMinutes = [...new Set([...remindedMinutes, ...dueReminderMinutes])].sort((a, b) => b - a);
     const channel = await clientChannelsFetch(poll.channelId).catch(() => null);
     if (isGuildTextChannel(channel) && channel.guild.id === poll.guildId) {
-      const role = poll.reminderNotifyRoleId
-        ? await channel.guild.roles.fetch(poll.reminderNotifyRoleId).catch(() => null)
-        : null;
-      const mention = role && role.guild.id === poll.guildId ? `<@&${role.id}>\n` : "";
+      const notification = await resolveNotificationMention(channel, poll.reminderNotifyRoleId);
+      const mention = notification.mention ? `${notification.mention}\n` : "";
       await channel.send({
         content: `${mention}日程調整「${poll.title}」の締切まであと${formatRemainingTime(remainingMs)}です。\n締切: ${formatDeadline(poll.deadline, poll.timezone)}\n投票をお忘れなく。`,
-        allowedMentions: role ? { roles: [role.id], parse: [] } : { parse: [] }
+        allowedMentions: notification.allowedMentions
       });
     }
     await setRemindedMinutes(poll.id, newlyRemindedMinutes);
@@ -622,8 +617,6 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   await closePoll(syncedPoll.id, "closed");
   requestPollScheduleRefresh();
   const closedPoll = (await getPoll(syncedPoll.id)) ?? syncedPoll;
-  const resultRoleId = closedPoll.notifyTarget?.match(/^<@&(\d{17,20})>$/)?.[1] ?? null;
-  const resultRole = resultRoleId ? await pollChannel?.guild.roles.fetch(resultRoleId).catch(() => null) : null;
   const docosaMention = config.personalGuildId === closedPoll.guildId ? await resolveDocosaMention(interaction.guild) : "";
   if (!pollChannel) {
     await interaction.editReply("日程調整を締め切りましたが、結果の投稿先チャンネルが見つかりません。");
@@ -631,10 +624,11 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   }
 
   const matrixAttachment = await buildResultMatrixAttachment(pollChannel, closedPoll);
+  const resultNotification = await resolveNotificationMention(pollChannel, closedPoll.notifyTarget);
   await pollChannel.send({
-    content: await buildResultMessage(closedPoll, docosaMention),
+    content: await buildResultMessage(closedPoll, docosaMention, resultNotification.mention),
     files: matrixAttachment ? [matrixAttachment] : [],
-    allowedMentions: resultRole ? { parse: [], roles: [resultRole.id] } : { parse: [] }
+    allowedMentions: resultNotification.allowedMentions
   });
   await interaction.editReply("日程調整を締め切り、結果を投稿しました。");
 }

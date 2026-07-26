@@ -7,12 +7,10 @@ import {
 } from "discord.js";
 import {
   handleCreateEventSlashCommand,
-  handleNotificationSettingsModal,
   handlePersonalSettingsCommand,
   handleScheduleAdminCommand,
   handleScheduleCommand,
-  handleScheduleSettingsCommand,
-  NOTIFICATION_SETTINGS_MODAL_ID
+  handleScheduleSettingsCommand
 } from "./commands.js";
 import { config } from "./config.js";
 import { getGuildSettings, hasGuildSettings, migrate, saveGuildSettings } from "./db.js";
@@ -54,10 +52,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isModalSubmit()) {
       if (interaction.customId === CREATE_EVENT_MODAL_ID) {
         await handleCreateEventModal(interaction);
-        return;
-      }
-      if (interaction.customId === NOTIFICATION_SETTINGS_MODAL_ID) {
-        await handleNotificationSettingsModal(interaction);
         return;
       }
     }

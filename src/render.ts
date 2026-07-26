@@ -56,7 +56,11 @@ export function buildVotedMembersMessage(names: string[], personal = false): str
   return `投票済み：${names.length ? names.join(", ") : personal ? "まだ投票者はゼロ！キミの一票を待ってるぞー！" : "まだ投票はありません。"}`;
 }
 
-export async function buildResultMessage(poll: PollWithOptions, leadingMention?: string): Promise<string> {
+export async function buildResultMessage(
+  poll: PollWithOptions,
+  leadingMention?: string,
+  notificationMention?: string
+): Promise<string> {
   const breakdown = await getVoteBreakdown(poll.id);
   const personal = (await getGuildSettings(poll.guildId)).messageStyle === "personal";
   const ranked = [...poll.options]
@@ -65,7 +69,7 @@ export async function buildResultMessage(poll: PollWithOptions, leadingMention?:
 
   const topCount = ranked[0]?.count ?? 0;
   const winners = topCount > 0 ? ranked.filter((item) => item.count === topCount) : [];
-  const mentions = [leadingMention, poll.notifyTarget].filter((mention): mention is string => Boolean(mention)).join("\n");
+  const mentions = [leadingMention, notificationMention].filter((mention): mention is string => Boolean(mention)).join("\n");
   const winnerLines =
     winners.length > 0
       ? winners.map((item) => {
