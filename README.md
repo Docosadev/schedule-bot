@@ -240,9 +240,9 @@ ID: poll_xxx
 
 結果には投票者と候補日ごとの参加可否マトリクス画像が添付されます。
 
-### `/schedule-extend poll_id:poll_xxx deadline:2026-07-02 23:59`
+### `/schedule-extend`
 
-締切を延長し、対象の日程調整スレッドへ新しい締切を投稿します。
+モーダルで日程調整IDと新しい締切日時を入力します。締切を延長した後、対象の日程調整スレッドへ新しい締切を投稿します。
 
 ### `/schedule-cancel poll_id:poll_xxx`
 

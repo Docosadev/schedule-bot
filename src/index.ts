@@ -10,9 +10,11 @@ import {
   handlePersonalSettingsCommand,
   handleScheduleCommand,
   handleScheduleDeleteDataCommand,
+  handleScheduleExtendModal,
   handleScheduleManagementCommand,
   handleScheduleTimezoneCommand,
   handleTimezoneSettingsModal,
+  SCHEDULE_EXTEND_MODAL_ID,
   TIMEZONE_SETTINGS_MODAL_ID
 } from "./commands.js";
 import { config } from "./config.js";
@@ -59,6 +61,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
       if (interaction.customId === TIMEZONE_SETTINGS_MODAL_ID) {
         await handleTimezoneSettingsModal(interaction);
+        return;
+      }
+      if (interaction.customId === SCHEDULE_EXTEND_MODAL_ID) {
+        await handleScheduleExtendModal(interaction);
         return;
       }
     }

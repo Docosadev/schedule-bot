@@ -6,6 +6,7 @@ import {
   Message,
   MessageFlags,
   MessageReaction,
+  ModalSubmitInteraction,
   PartialMessageReaction,
   PartialUser,
   ThreadAutoArchiveDuration,
@@ -43,6 +44,8 @@ import { resolveNotificationMention } from "./notificationMentions.js";
 import { requestPollScheduleRefresh } from "./schedulerHooks.js";
 import type { Poll, PollOption, PollWithOptions, VoteStatus } from "./types.js";
 import { statusFromEmoji, VOTE_EMOJIS } from "./voteEmojis.js";
+
+type PollCommandInteraction = ChatInputCommandInteraction | ModalSubmitInteraction;
 
 export type SchedulePollInput = {
   guildId: string;
@@ -149,7 +152,7 @@ async function createScheduleThread(channel: GuildTextBasedChannel, title: strin
   }
 }
 
-async function fetchPollChannel(interaction: ChatInputCommandInteraction, poll: PollWithOptions): Promise<GuildTextBasedChannel | null> {
+async function fetchPollChannel(interaction: PollCommandInteraction, poll: PollWithOptions): Promise<GuildTextBasedChannel | null> {
   const channel = await interaction.client.channels.fetch(poll.channelId).catch(() => null);
   return isGuildTextChannel(channel) && channel.guild.id === poll.guildId && channel.guild.id === interaction.guildId ? channel : null;
 }
@@ -645,11 +648,13 @@ export async function closePollByCommand(interaction: ChatInputCommandInteractio
   await interaction.editReply("日程調整を締め切り、結果を投稿しました。");
 }
 
-export async function extendPollByCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function extendPollByCommand(
+  interaction: PollCommandInteraction,
+  pollId: string,
+  deadlineInput: string
+): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const pollId = interaction.options.getString("poll_id", true);
-  const deadlineInput = interaction.options.getString("deadline", true);
   const poll = await getPoll(pollId);
   const deadline = poll ? parseLocalDateTime(deadlineInput, poll.timezone) : null;
 
@@ -702,7 +707,7 @@ export async function deletePollByCommand(interaction: ChatInputCommandInteracti
   await interaction.editReply(`日程調整を削除しました。関連するメッセージまたはスレッドの削除数: ${deletedMessages}件`);
 }
 
-export function canManagePoll(interaction: ChatInputCommandInteraction, poll: PollWithOptions): boolean {
+export function canManagePoll(interaction: PollCommandInteraction, poll: PollWithOptions): boolean {
   if (!interaction.guildId || interaction.guildId !== poll.guildId) {
     return false;
   }

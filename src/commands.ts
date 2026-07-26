@@ -8,7 +8,9 @@ import {
   PermissionFlagsBits,
   Routes,
   SlashCommandBuilder,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } from "discord.js";
 import { config } from "./config.js";
 import { deleteGuildData, getGuildSettings, saveGuildSettings } from "./db.js";
@@ -35,12 +37,9 @@ export const scheduleCloseCommand = addPollIdOption(
   new SlashCommandBuilder().setName("schedule-close").setDescription("日程調整を締め切って集計します")
 ).setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
-export const scheduleExtendCommand = addPollIdOption(
-  new SlashCommandBuilder().setName("schedule-extend").setDescription("日程調整の締切を延長します")
-)
-  .addStringOption((option) =>
-    option.setName("deadline").setDescription("新しい締切日時").setRequired(true)
-  )
+export const scheduleExtendCommand = new SlashCommandBuilder()
+  .setName("schedule-extend")
+  .setDescription("日程調整の締切を延長します")
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
 export const scheduleCancelCommand = addPollIdOption(
@@ -118,7 +117,10 @@ export const personalCommands = [
 ];
 
 export const TIMEZONE_SETTINGS_MODAL_ID = "schedule_settings_timezone";
+export const SCHEDULE_EXTEND_MODAL_ID = "schedule_extend_input";
 const TIMEZONE_SELECT_ID = "timezone_value";
+const EXTEND_POLL_ID_INPUT_ID = "extend_poll_id";
+const EXTEND_DEADLINE_INPUT_ID = "extend_deadline";
 const TIMEZONE_CHOICES = [
   { label: "日本標準時", description: "東京", value: "Asia/Tokyo" },
   { label: "協定世界時", description: "UTC", value: "UTC" },
@@ -164,7 +166,34 @@ export async function handleScheduleManagementCommand(interaction: ChatInputComm
     return;
   }
   if (interaction.commandName === "schedule-extend") {
-    await extendPollByCommand(interaction);
+    const modal = new ModalBuilder()
+      .setCustomId(SCHEDULE_EXTEND_MODAL_ID)
+      .setTitle("日程調整の締切延長")
+      .addLabelComponents(
+        new LabelBuilder()
+          .setLabel("日程調整ID")
+          .setDescription("対象の日程調整に表示されているIDを入力してください。")
+          .setTextInputComponent(
+            new TextInputBuilder()
+              .setCustomId(EXTEND_POLL_ID_INPUT_ID)
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder("poll_xxx")
+              .setRequired(true)
+              .setMaxLength(100)
+          ),
+        new LabelBuilder()
+          .setLabel("新しい締切日時")
+          .setDescription("サーバーに設定されたタイムゾーンで入力してください。")
+          .setTextInputComponent(
+            new TextInputBuilder()
+              .setCustomId(EXTEND_DEADLINE_INPUT_ID)
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder("2026-07-02 23:59")
+              .setRequired(true)
+              .setMaxLength(100)
+          )
+      );
+    await interaction.showModal(modal);
     return;
   }
   if (interaction.commandName === "schedule-cancel") {
@@ -174,6 +203,15 @@ export async function handleScheduleManagementCommand(interaction: ChatInputComm
   if (interaction.commandName === "schedule-delete") {
     await deletePollByCommand(interaction);
   }
+}
+
+export async function handleScheduleExtendModal(interaction: ModalSubmitInteraction): Promise<void> {
+  if (interaction.customId !== SCHEDULE_EXTEND_MODAL_ID) {
+    return;
+  }
+  const pollId = interaction.fields.getTextInputValue(EXTEND_POLL_ID_INPUT_ID).trim();
+  const deadline = interaction.fields.getTextInputValue(EXTEND_DEADLINE_INPUT_ID).trim();
+  await extendPollByCommand(interaction, pollId, deadline);
 }
 
 export async function handleCreateEventSlashCommand(interaction: ChatInputCommandInteraction): Promise<void> {
