@@ -219,8 +219,7 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
   const embed = new EmbedBuilder()
     .setColor(0xe33555)
     .setTitle(state.title)
-    .setDescription(buildEventInfoDescription(state, candidate))
-    .setFooter({ text: "開催情報をご確認ください。" });
+    .setDescription(buildEventInfoDescription(state, candidate));
 
   if (staticMapUrl) {
     embed.setImage(staticMapUrl);
