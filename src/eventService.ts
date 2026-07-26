@@ -1,6 +1,5 @@
 import {
   ActionRowBuilder,
-  AttachmentBuilder,
   ChannelSelectMenuBuilder,
   ChannelType,
   ChatInputCommandInteraction,
@@ -20,7 +19,6 @@ import {
 } from "discord.js";
 import { getGuildSettings, getPollForGuild } from "./db.js";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
 import { config } from "./config.js";
 import { parseLocalDateTime } from "./dateUtils.js";
 import { resolveNotificationMention } from "./notificationMentions.js";
@@ -53,8 +51,6 @@ type PendingEventCreation = {
 };
 
 const PENDING_EVENT_TTL_MS = 15 * 60_000;
-const EVENT_THUMBNAIL_FILE_NAME = "icon_calender.png";
-const EVENT_THUMBNAIL_PATH = resolve(process.cwd(), "assets", EVENT_THUMBNAIL_FILE_NAME);
 const pendingEventCreations = new Map<string, PendingEventCreation>();
 export const CREATE_EVENT_MODAL_ID = "create_event_input";
 
@@ -116,10 +112,6 @@ function buildStaticMapUrl(address: string | null): string | null {
     key: config.googleMapsApiKey
   });
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-}
-
-function buildEventThumbnailAttachment(): AttachmentBuilder {
-  return new AttachmentBuilder(EVENT_THUMBNAIL_PATH, { name: EVENT_THUMBNAIL_FILE_NAME });
 }
 
 export function parseResultMessage(content: string): ParsedResultMessage | null {
@@ -228,7 +220,6 @@ function buildEventInfoEmbed(state: Omit<PendingEventCreation, "token" | "candid
     .setColor(0xe33555)
     .setTitle(state.title)
     .setDescription(buildEventInfoDescription(state, candidate))
-    .setThumbnail(`attachment://${EVENT_THUMBNAIL_FILE_NAME}`)
     .setFooter({ text: "開催情報をご確認ください。" });
 
   if (staticMapUrl) {
@@ -254,7 +245,6 @@ async function createFromCandidate(
 ): Promise<{
   content: string;
   embeds: EmbedBuilder[];
-  files: AttachmentBuilder[];
   allowedMentions: MessageMentionOptions;
 }> {
   if (!interaction.guild || !interaction.guildId || !interaction.channelId) {
@@ -269,7 +259,6 @@ async function createFromCandidate(
   return {
     content: `${mention}開催情報が決定しました。内容をご確認ください。`,
     embeds: [buildEventInfoEmbed(state, candidate)],
-    files: [buildEventThumbnailAttachment()],
     allowedMentions: notification.allowedMentions
   };
 }
