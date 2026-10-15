@@ -39,6 +39,15 @@ export function trackDiscordConnection(client: Client): void {
     if (request.path !== "/gateway/bot") return;
     state.gatewayHttpStatus = response.status;
     console.log("Discord gateway HTTP response", { status: response.status });
+    // Unexpected 429s may be handled as sublimits without a RateLimited event.
+    if (response.status === 429) {
+      const header = response.headers.get("retry-after");
+      const retryTime = header === null ? NaN :
+        /^\d+(\.\d+)?$/.test(header) ? Date.now() + Number(header) * 1_000 : Date.parse(header);
+      if (Number.isFinite(retryTime)) state.retryAt = new Date(retryTime).toISOString();
+      else delete state.retryAt;
+      update("rate-limited");
+    }
   });
   client.rest.on(RESTEvents.RateLimited, (info) => {
     if (info.route !== "/gateway/bot") return;

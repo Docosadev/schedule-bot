@@ -14,8 +14,9 @@ function clientFixture() {
 
 test("connection diagnostics distinguish HTTP rate limit from WebSocket readiness", () => {
   const client = clientFixture();
-  client.rest.emit(RESTEvents.Response, { path: "/gateway/bot" }, { status: 429 });
-  client.rest.emit(RESTEvents.RateLimited, { route: "/gateway/bot", retryAfter: 60_000 });
+  client.rest.emit(RESTEvents.Response, { path: "/gateway/bot" }, {
+    status: 429, headers: new Map([["retry-after", "60"]])
+  });
   let state = getDiscordConnectionStatus(client);
   assert.equal(state.phase, "rate-limited");
   assert.equal(state.gatewayHttpStatus, 429);
@@ -28,6 +29,13 @@ test("connection diagnostics distinguish HTTP rate limit from WebSocket readines
   assert.equal(state.gatewayHttpStatus, 200);
   client.isReady = () => true;
   assert.equal(getDiscordConnectionStatus(client).phase, "ready");
+});
+
+test("429 without a retry header is still reported without inventing a retry time", () => {
+  const client = clientFixture();
+  client.rest.emit(RESTEvents.Response, { path: "/gateway/bot" }, { status: 429, headers: new Map() });
+  assert.equal(getDiscordConnectionStatus(client).phase, "rate-limited");
+  assert.equal(getDiscordConnectionStatus(client).retryAt, undefined);
 });
 
 test("diagnostics do not expose token fragments or unrelated API routes", () => {
