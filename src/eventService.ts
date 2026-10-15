@@ -359,7 +359,7 @@ function buildCreateEventModal(): ModalBuilder {
           .setCustomId("event_channel")
           .setLabel("開催場所（チャンネル・任意）")
           .setStyle(TextInputStyle.Short)
-          .setPlaceholder("チャンネルメンション、またはID")
+          .setPlaceholder("空欄可。例: #一般、チャンネルID")
           .setRequired(false)
           .setMaxLength(30)
       ),
@@ -374,30 +374,35 @@ function buildCreateEventModal(): ModalBuilder {
     );
 }
 
-function parseChannelId(value: string): string | null {
+async function resolveEventChannel(
+  interaction: ModalSubmitInteraction,
+  value: string
+): Promise<string | null> {
   const normalized = value.trim();
   if (!normalized) {
     return null;
   }
   const channelId = normalized.match(/^<#(\d+)>$/)?.[1] ?? normalized.match(/^\d+$/)?.[0];
-  if (!channelId) {
-    throw new Error("開催場所のチャンネルは、チャンネルメンションまたはチャンネルIDで入力してください。");
+  if (channelId) {
+    const channel = await interaction.guild?.channels.fetch(channelId);
+    if (!channel || (!channel.isTextBased() && !channel.isVoiceBased())) {
+      throw new Error("開催場所として指定されたチャンネルを確認できません。同じサーバーのチャンネルを指定してください。");
+    }
+    return channel.id;
   }
-  return channelId;
-}
 
-async function validateEventChannel(
-  interaction: ModalSubmitInteraction,
-  channelId: string | null
-): Promise<string | null> {
-  if (!channelId) {
-    return null;
+  const name = normalized.replace(/^[#＃]/, "");
+  const channels = await interaction.guild?.channels.fetch();
+  const matches = channels?.filter((channel) =>
+    channel !== null && channel.name === name && (channel.isTextBased() || channel.isVoiceBased())
+  );
+  if (!matches?.size) {
+    throw new Error("開催場所のチャンネルが見つかりません。空欄にするか、同じサーバーのチャンネル名（例: #一般）・メンション・IDを指定してください。");
   }
-  const channel = await interaction.guild?.channels.fetch(channelId).catch(() => null);
-  if (!channel || !channel.isTextBased() && !channel.isVoiceBased()) {
-    throw new Error("開催場所として指定されたチャンネルを確認できません。同じサーバーのチャンネルを指定してください。");
+  if (matches.size > 1) {
+    throw new Error("同名のチャンネルが複数あります。チャンネルメンションまたはIDで指定してください。");
   }
-  return channel.id;
+  return matches.first()!.id;
 }
 
 function parseIntegerInput(value: string, label: string, minimum: number): number {
@@ -416,17 +421,23 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
   if (interaction.customId !== CREATE_EVENT_MODAL_ID) {
     return;
   }
-  assertCreateEventPermissions(interaction);
-
-  const price = parseIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
-  const attendees = parseIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "参加人数", 1);
-  const address = interaction.fields.getTextInputValue("event_address").trim();
-  const inputEventChannelId = parseChannelId(interaction.fields.getTextInputValue("event_channel"));
-  const customMessage = interaction.fields.getTextInputValue("event_custom_message").trim() || null;
-
+  const context = { interactionId: interaction.id, ageMs: Date.now() - interaction.createdTimestamp };
+  console.log("create event modal received", context);
+  // Acknowledge before validation so errors are shown outside the modal.
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  console.log("create event modal acknowledged", context);
+  let stage = "permissions";
   try {
-    const eventChannelId = await validateEventChannel(interaction, inputEventChannelId);
+    assertCreateEventPermissions(interaction);
+    stage = "input";
+    const price = parseIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
+    const attendees = parseIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "参加人数", 1);
+    const address = interaction.fields.getTextInputValue("event_address").trim();
+    const inputChannel = interaction.fields.getTextInputValue("event_channel") ?? "";
+    const customMessage = (interaction.fields.getTextInputValue("event_custom_message") ?? "").trim() || null;
+    stage = "channel";
+    const eventChannelId = await resolveEventChannel(interaction, inputChannel);
+    stage = "result-message";
     const sourceMessage = await resolveSourceMessage(interaction);
     const parsed = parseResultMessage(sourceMessage.content);
     if (!parsed) {
@@ -448,6 +459,7 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
     };
 
     if (parsed.candidates.length === 1) {
+      stage = "post";
       const postedMessage = await postEventInfo(interaction, baseState, parsed.candidates[0]);
       await interaction.editReply(`開催情報を投稿しました: ${postedMessage.url}`);
       return;
@@ -462,11 +474,15 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
     };
     pendingEventCreations.set(token, state);
 
+    stage = "candidate-selection";
     await interaction.editReply({
       content: "候補日が複数あります。開催する日程を選択してください。",
       components: [buildCandidateSelect(state)]
     });
   } catch (error) {
+    console.error("create event modal processing failed", {
+      ...context, stage, message: error instanceof Error ? error.message : "Unknown error"
+    });
     await interaction.editReply(formatCreateEventError(error));
   }
 }
