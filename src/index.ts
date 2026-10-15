@@ -102,6 +102,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await handlePersonalSettingsCommand(interaction);
     }
   } catch (error) {
+    console.error("interaction handling failed", {
+      type: interaction.type,
+      commandName: interaction.isChatInputCommand() ? interaction.commandName : undefined,
+      customId: interaction.isMessageComponent() || interaction.isModalSubmit() ? interaction.customId : undefined
+    }, error);
     const message = error instanceof Error ? error.message : "予期しないエラーが発生しました。時間をおいて再度実行してください。";
     try {
       if (!interaction.isRepliable()) {

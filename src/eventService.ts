@@ -1,11 +1,8 @@
 import {
   ActionRowBuilder,
-  ChannelSelectMenuBuilder,
-  ChannelType,
   ChatInputCommandInteraction,
   EmbedBuilder,
   GuildTextBasedChannel,
-  LabelBuilder,
   Message,
   MessageFlags,
   type MessageMentionOptions,
@@ -329,66 +326,82 @@ function buildCreateEventModal(): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(CREATE_EVENT_MODAL_ID)
     .setTitle("開催情報の入力")
-    .addLabelComponents(
-      new LabelBuilder()
-        .setLabel("利用総額（円）")
-        .setDescription("貸会議室などの利用総額を入力してください。")
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId("event_price")
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder("例: 10000")
-            .setRequired(false)
-            .setMaxLength(12)
-        ),
-      new LabelBuilder()
-        .setLabel("参加人数")
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId("event_attendees")
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder("例: 5")
-            .setRequired(false)
-            .setMaxLength(6)
-        ),
-      new LabelBuilder()
-        .setLabel("開催場所（住所）")
-        .setDescription("入力した場合だけGoogle Mapsと地図を表示します。")
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId("event_address")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(false)
-            .setMaxLength(500)
-        ),
-      new LabelBuilder()
-        .setLabel("開催場所（チャンネル）")
-        .setDescription("Discord内の開催チャンネルを選択してください。")
-        .setChannelSelectMenuComponent(
-          new ChannelSelectMenuBuilder()
-            .setCustomId("event_channel")
-            .setChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice)
-            .setRequired(false)
-            .setMinValues(0)
-            .setMaxValues(1)
-        ),
-      new LabelBuilder()
-        .setLabel("自由入力メッセージ")
-        .setTextInputComponent(
-          new TextInputBuilder()
-            .setCustomId("event_custom_message")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(false)
-            .setMaxLength(1000)
-        )
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("event_price")
+          .setLabel("利用総額（円）")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("例: 6339")
+          .setRequired(true)
+          .setMaxLength(12)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("event_attendees")
+          .setLabel("参加人数")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("例: 4")
+          .setRequired(true)
+          .setMaxLength(6)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("event_address")
+          .setLabel("開催場所（住所）")
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder("例: 東京都千代田区神田佐久間町2丁目8番地")
+          .setRequired(true)
+          .setMaxLength(500)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("event_channel")
+          .setLabel("開催場所（チャンネル・任意）")
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder("チャンネルメンション、またはID")
+          .setRequired(false)
+          .setMaxLength(30)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder()
+          .setCustomId("event_custom_message")
+          .setLabel("自由入力メッセージ（任意）")
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(false)
+          .setMaxLength(1000)
+      )
     );
 }
 
-function parseOptionalIntegerInput(value: string, label: string, minimum: number): number | null {
-  const normalized = value.trim().replace(/[,\s]/g, "");
+function parseChannelId(value: string): string | null {
+  const normalized = value.trim();
   if (!normalized) {
     return null;
   }
+  const channelId = normalized.match(/^<#(\d+)>$/)?.[1] ?? normalized.match(/^\d+$/)?.[0];
+  if (!channelId) {
+    throw new Error("開催場所のチャンネルは、チャンネルメンションまたはチャンネルIDで入力してください。");
+  }
+  return channelId;
+}
+
+async function validateEventChannel(
+  interaction: ModalSubmitInteraction,
+  channelId: string | null
+): Promise<string | null> {
+  if (!channelId) {
+    return null;
+  }
+  const channel = await interaction.guild?.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isTextBased() && !channel.isVoiceBased()) {
+    throw new Error("開催場所として指定されたチャンネルを確認できません。同じサーバーのチャンネルを指定してください。");
+  }
+  return channel.id;
+}
+
+function parseIntegerInput(value: string, label: string, minimum: number): number {
+  const normalized = value.trim().replace(/[,\s]/g, "");
   if (!/^\d+$/.test(normalized)) {
     throw new Error(`${label}は半角数字で入力してください。`);
   }
@@ -405,25 +418,15 @@ export async function handleCreateEventModal(interaction: ModalSubmitInteraction
   }
   assertCreateEventPermissions(interaction);
 
-  const price = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
-  const attendees = parseOptionalIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "参加人数", 1);
-  const address = interaction.fields.getTextInputValue("event_address").trim() || null;
-  const eventChannelId = interaction.fields.getSelectedChannels(
-    "event_channel",
-    false,
-    [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildStageVoice]
-  )?.first()?.id ?? null;
+  const price = parseIntegerInput(interaction.fields.getTextInputValue("event_price"), "利用総額", 0);
+  const attendees = parseIntegerInput(interaction.fields.getTextInputValue("event_attendees"), "参加人数", 1);
+  const address = interaction.fields.getTextInputValue("event_address").trim();
+  const inputEventChannelId = parseChannelId(interaction.fields.getTextInputValue("event_channel"));
   const customMessage = interaction.fields.getTextInputValue("event_custom_message").trim() || null;
-  if (price === null && attendees === null && !address && !eventChannelId && !customMessage) {
-    await interaction.reply({
-      content: "開催情報を1項目以上入力してください。",
-      flags: MessageFlags.Ephemeral
-    });
-    return;
-  }
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
+    const eventChannelId = await validateEventChannel(interaction, inputEventChannelId);
     const sourceMessage = await resolveSourceMessage(interaction);
     const parsed = parseResultMessage(sourceMessage.content);
     if (!parsed) {
