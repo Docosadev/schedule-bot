@@ -169,6 +169,11 @@ Interval: 5 minutes
 `/healthz` は Web プロセスの生存確認です。
 Discord 接続完了まで確認したい場合は `/readyz` も使えますが、スリープ復帰直後はDown判定されやすいため、監視URLは `/healthz` 推奨です。
 
+BotがオフラインなのにRenderがLiveになる場合は `/readyz` を確認してください。
+未接続時は503と接続段階（`connection.phase`）、Gateway APIの応答コード、レート制限時の再試行予定時刻を返します。
+トークン・入力内容は返しません。Renderのデプロイ判定にもDiscord接続を含める場合は、Health Check Pathを `/readyz` に設定します。
+`/healthz` の200はDiscord接続成功を意味しません。
+
 ### Neon の Compute 節約
 
 Discord BOT を動かす Render は常時起動しますが、Neon は必要なときだけ起動する構成です。

@@ -18,6 +18,7 @@ import {
   TIMEZONE_SETTINGS_MODAL_ID
 } from "./commands.js";
 import { config } from "./config.js";
+import { getDiscordConnectionStatus, trackDiscordConnection } from "./discordConnection.js";
 import { getGuildSettings, hasGuildSettings, migrate, saveGuildSettings } from "./db.js";
 import { CREATE_EVENT_MODAL_ID, handleCreateEventModal, handleCreateEventSelection } from "./eventService.js";
 import { handleReactionAdd, handleReactionRemove } from "./pollService.js";
@@ -162,4 +163,11 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
   }
 });
 
+trackDiscordConnection(client);
+const connectionWatch = setInterval(() => {
+  if (!client.isReady()) {
+    console.warn("Discord connection pending", getDiscordConnectionStatus(client));
+  }
+}, 60_000);
+connectionWatch.unref();
 await client.login(config.token);

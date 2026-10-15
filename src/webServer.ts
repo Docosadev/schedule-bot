@@ -1,6 +1,7 @@
 import { PermissionFlagsBits, type Client } from "discord.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { config } from "./config.js";
+import { getDiscordConnectionStatus } from "./discordConnection.js";
 import {
   EVERYONE_NOTIFICATION_TARGET,
   formatNotificationTarget,
@@ -236,7 +237,12 @@ async function handleRequest(client: Client, request: IncomingMessage, response:
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/readyz") {
     const ready = client.isReady();
     logHealthCheck(request, url.pathname, ready ? 200 : 503);
-    sendJson(response, ready ? 200 : 503, { ok: ready, discordReady: ready }, request.method === "HEAD");
+    sendJson(response, ready ? 200 : 503, {
+      ok: ready,
+      discordReady: ready,
+      connection: getDiscordConnectionStatus(client),
+      revision: process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? null
+    }, request.method === "HEAD");
     return;
   }
 
