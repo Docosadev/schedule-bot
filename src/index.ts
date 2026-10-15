@@ -48,8 +48,30 @@ startWebServer(client);
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
-  void startPollScheduler(client);
+  void startPollScheduler(client).catch((error) => {
+    console.error("poll scheduler startup failed", error);
+  });
   startPokemonProductScheduler((channelId) => client.channels.fetch(channelId));
+});
+
+client.on(Events.Error, (error) => {
+  console.error("Discord client error", error);
+});
+
+client.on(Events.ShardError, (error, shardId) => {
+  console.error("Discord shard error", { shardId }, error);
+});
+
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  console.warn("Discord shard disconnected", { shardId, code: event.code, reason: event.reason });
+});
+
+client.on(Events.ShardReconnecting, (shardId) => {
+  console.warn("Discord shard reconnecting", { shardId });
+});
+
+client.on(Events.ShardResume, (shardId, replayedEvents) => {
+  console.log("Discord shard resumed", { shardId, replayedEvents });
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

@@ -20,11 +20,15 @@ let channelsFetch: ((channelId: string) => Promise<unknown>) | null = null;
 export async function startPollScheduler(client: Client): Promise<void> {
   channelsFetch = (channelId) => client.channels.fetch(channelId);
   registerPollScheduleRefresh(queuePollScheduleRefresh);
-  await runDataCleanup();
+  await runDataCleanup().catch((error) => {
+    console.error("initial expired data cleanup failed", error);
+  });
   await refreshPollSchedule();
 
   reconciliationTimer = setInterval(() => {
-    void runDataCleanup();
+    void runDataCleanup().catch((error) => {
+      console.error("scheduled expired data cleanup failed", error);
+    });
     queuePollScheduleRefresh();
   }, RECONCILIATION_INTERVAL_MS);
   reconciliationTimer.unref();
